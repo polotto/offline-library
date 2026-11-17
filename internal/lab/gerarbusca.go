@@ -110,6 +110,12 @@ func GerarBusca(ctx context.Context, pbf, saida string) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
+	// Ordenações grandes do SQLite vão para a pasta de trabalho, não para
+	// /tmp, que em muitos Linux fica na memória e é pequeno.
+	if os.Getenv("SQLITE_TMPDIR") == "" {
+		os.Setenv("SQLITE_TMPDIR", tmp)
+		defer os.Unsetenv("SQLITE_TMPDIR")
+	}
 	procs := max(1, runtime.GOMAXPROCS(0)-1)
 
 	// 1. Vias com nome: grava tipo, nome e o nó do meio.
