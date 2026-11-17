@@ -125,12 +125,28 @@ func (p *Processo) Rodar(ctx context.Context) {
 		p.mu.Unlock()
 		log.Printf("%s: iniciado na porta interna %d (PID %d)", p.Nome, porta, cmd.Process.Pid)
 		terminou := make(chan error, 1)
-		go func() { terminou <- cmd.Wait() }()
+		vivo := make(chan struct{})
+		go func() { terminou <- cmd.Wait(); close(vivo) }()
+		// Coleções grandes em disco USB podem levar minutos para abrir:
+		// espera enquanto o processo estiver vivo.
 		go func() {
-			if esperarPorta(porta, 90*time.Second) {
+			for {
+				select {
+				case <-vivo:
+					return
+				default:
+				}
+				if esperarPorta(porta, 2*time.Second) {
+					p.mu.Lock()
+					if p.cmd == cmd {
+						p.estado, p.detalhe = "pronto", "Em funcionamento."
+					}
+					p.mu.Unlock()
+					return
+				}
 				p.mu.Lock()
 				if p.cmd == cmd {
-					p.estado, p.detalhe = "pronto", "Em funcionamento."
+					p.detalhe = fmt.Sprintf("Abrindo coleções há %s.", time.Since(inicio).Round(time.Second))
 				}
 				p.mu.Unlock()
 			}

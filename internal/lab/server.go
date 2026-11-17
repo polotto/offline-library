@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/polotto/offline-library/web"
@@ -31,6 +32,10 @@ type Servidor struct {
 	busca       *Busca
 	atualizador *Atualizador
 	web         fs.FS
+
+	estadoMu    sync.Mutex
+	estadoEm    time.Time
+	estadoCache []byte
 }
 
 func NovoServidor(cfg *Config) (*Servidor, error) {

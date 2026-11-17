@@ -136,7 +136,22 @@ type colecao struct {
 	Pct     *int   `json:"pct,omitempty"`
 }
 
+// estado responde do cache por alguns segundos: cada cálculo lê o disco,
+// que em USB lento pode travar por dezenas de segundos.
 func (s *Servidor) estado(w http.ResponseWriter, r *http.Request) {
+	s.estadoMu.Lock()
+	if time.Since(s.estadoEm) > 10*time.Second || s.estadoCache == nil {
+		s.estadoCache = s.calcularEstado()
+		s.estadoEm = time.Now()
+	}
+	corpo := s.estadoCache
+	s.estadoMu.Unlock()
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(corpo)
+}
+
+func (s *Servidor) calcularEstado() []byte {
 	c := s.cfg
 	resp := map[string]any{"nome": c.Nome, "atualizado": time.Now().UTC().Format(time.RFC3339),
 		"plataforma": Plataforma(), "versao": Versao}
@@ -186,9 +201,8 @@ func (s *Servidor) estado(w http.ResponseWriter, r *http.Request) {
 		resp["disco"] = map[string]string{"livre": tamanhoLegivel(int64(livre)), "total": tamanhoLegivel(int64(total))}
 	}
 	resp["atualizacoes"] = s.atualizador.resumo()
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(resp)
+	b, _ := json.Marshal(resp)
+	return b
 }
 
 // Verificar confere cada serviço por dentro e devolve o resultado.
