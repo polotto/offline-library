@@ -22,6 +22,9 @@ type Config struct {
 	Atualizar       bool     `json:"atualizar"`
 	HoraAtualizacao int      `json:"hora_atualizacao"`
 	MemoriaRotasMB  int      `json:"memoria_rotas_mb"`
+	// PortasAntigas redireciona portas de instalações anteriores para um
+	// caminho, por exemplo {"8088": "/wiki/"}, para manter favoritos.
+	PortasAntigas map[string]string `json:"portas_antigas"`
 
 	Dados string `json:"-"`
 	Logs  string `json:"-"`

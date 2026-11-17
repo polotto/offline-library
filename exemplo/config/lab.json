@@ -6,5 +6,6 @@
   "redes_permitidas": [],
   "atualizar": true,
   "hora_atualizacao": 3,
-  "memoria_rotas_mb": 192
+  "memoria_rotas_mb": 192,
+  "portas_antigas": {}
 }

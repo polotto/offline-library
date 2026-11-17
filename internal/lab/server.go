@@ -220,6 +220,8 @@ func (s *Servidor) proxyKiwix() http.Handler {
 // Iniciar sobe os processos de apoio e o servidor web até o contexto acabar.
 func (s *Servidor) Iniciar(ctx context.Context) error {
 	go s.kiwix.Rodar(ctx)
+	go s.vigiarColecoes(ctx)
+	s.redirecionarPortasAntigas(ctx)
 	go s.rotas.Rodar(ctx)
 	if s.cfg.Atualizar {
 		go s.atualizador.Rodar(ctx)
@@ -265,4 +267,53 @@ func Enderecos(porta int) string {
 	}
 	lista = append(lista, fmt.Sprintf("127.0.0.1:%d", porta))
 	return strings.Join(lista, " e http://")
+}
+
+// vigiarColecoes reinicia o Kiwix quando a lista de coleções conferidas
+// muda, por exemplo quando outro programa termina um download.
+func (s *Servidor) vigiarColecoes(ctx context.Context) {
+	assinatura := func() string {
+		var l []string
+		for _, z := range ZimsProntos(s.cfg) {
+			l = append(l, z.Arquivo)
+		}
+		return strings.Join(l, "|")
+	}
+	atual := assinatura()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Minute):
+		}
+		if nova := assinatura(); nova != atual {
+			log.Printf("kiwix: coleções mudaram; reiniciando")
+			atual = nova
+			s.kiwix.Reiniciar()
+		}
+	}
+}
+
+func (s *Servidor) redirecionarPortasAntigas(ctx context.Context) {
+	for porta, caminho := range s.cfg.PortasAntigas {
+		caminho := "/" + strings.Trim(caminho, "/") + "/"
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			host, _, err := net.SplitHostPort(r.Host)
+			if err != nil {
+				host = r.Host
+			}
+			destino := fmt.Sprintf("http://%s:%d%s%s", host, s.cfg.Porta, caminho, strings.TrimPrefix(r.URL.Path, "/"))
+			if r.URL.RawQuery != "" {
+				destino += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, destino, http.StatusMovedPermanently)
+		})
+		srv := &http.Server{Addr: s.cfg.Endereco + ":" + porta, Handler: s.filtro(h), ReadHeaderTimeout: 10 * time.Second}
+		go func() {
+			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("porta antiga %s: %v", porta, err)
+			}
+		}()
+		go func() { <-ctx.Done(); _ = srv.Close() }()
+	}
 }
