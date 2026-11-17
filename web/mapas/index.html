@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mapa offline</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./assets/maplibre-gl.css">
+<style>
+body{margin:0;height:100dvh;overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr);font:16px system-ui;color:#173c36;background:#f5f3ed}#map{position:relative;min-height:0;width:100%}header{min-height:56px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:10px 18px;box-sizing:border-box}header strong{white-space:nowrap}#status{font-size:13px;min-width:0;flex-basis:100%}a{color:inherit}button{font:inherit;font-size:13px;border:1px solid #52745b;border-radius:5px;background:#fffdf7;color:#173c36;padding:5px 9px;cursor:pointer}button[aria-pressed=true]{background:#173c36;color:white}button[hidden]{display:none}@media(max-width:600px){#status{font-size:12px}header{padding:8px 12px;gap:5px 10px}}
+</style>
+<link rel="stylesheet" href="./rotas.css">
+<link rel="stylesheet" href="./busca.css">
+<header><a id="inicio" href="/">Início</a><strong>América do Sul</strong><form id="busca" role="search" autocomplete="off"><input id="busca-texto" type="search" placeholder="Buscar endereço ou lugar" aria-label="Buscar endereço ou lugar" aria-controls="busca-lista" disabled><ul id="busca-lista" role="listbox" hidden></ul></form><button id="continente" type="button">Visão geral</button><button id="curitiba" type="button" hidden>Ruas de Curitiba</button><span id="status" role="status">Conferindo mapas locais...</span></header>
+<details id="rota-painel">
+<summary>Traçar caminho offline</summary>
+<form id="rota-form">
+<p id="rota-ajuda">Escolha a origem e o destino clicando no mapa. Também pode buscar um endereço e usar o resultado como origem ou destino. O caminho segue as ruas e é calculado neste servidor, sem internet.</p>
+<div class="rota-pontos">
+<div><button id="rota-origem" type="button" aria-pressed="false" disabled>Marcar origem A</button><output id="rota-origem-valor">Não escolhida</output></div>
+<div><button id="rota-destino" type="button" aria-pressed="false" disabled>Marcar destino B</button><output id="rota-destino-valor">Não escolhido</output></div>
+</div>
+<div class="rota-acoes">
+<label for="rota-perfil">Como ir</label><select id="rota-perfil"><option value="car-fast">Carro</option><option value="trekking">Bicicleta</option><option value="walking">A pé</option></select>
+<button id="rota-centro" type="button" disabled>Usar centro do mapa</button>
+<button id="rota-inverter" type="button" disabled>Inverter</button>
+<button id="rota-limpar" type="button">Limpar</button>
+<button id="rota-calcular" type="submit" disabled>Calcular caminho</button>
+</div>
+<p id="rota-estado" role="status" aria-live="polite">Abra o mapa e escolha os pontos.</p>
+</form>
+</details>
+<div id="map" aria-label="Mapa interativo da América do Sul"></div>
+<script src="./assets/maplibre-gl.js"></script>
+<script src="./assets/pmtiles.js"></script>
+<script src="./rotas.js"></script>
+<script src="./busca.js"></script>
+<script>
+const status = document.getElementById('status');
+const geral = document.getElementById('continente');
+const cidade = document.getElementById('curitiba');
+const limitesCuritiba = [[-49.6,-25.7],[-49,-25.2]];
+async function disponivel(nome) {
+  try { return (await fetch('./'+nome, {method:'HEAD',cache:'no-store'})).ok; }
+  catch (_) { return false; }
+}
+async function iniciar() {
+  try {
+    let [completo,curitiba,panorama] = await Promise.all(['america-sul.pmtiles','curitiba.pmtiles','panorama.pmtiles'].map(disponivel));
+    if (!completo && !curitiba && !panorama) {
+      status.textContent = 'Mapas ainda baixando. Atualize a página depois.';
+      return;
+    }
+    let modo = completo ? 'continente' : curitiba ? 'curitiba' : 'panorama';
+    const modelo = await (await fetch('./style.json')).json();
+    const ruas = await (await fetch('./estilo-ruas.json')).json();
+    for (const camada of modelo.layers) {
+      const rotulo = ruas.rotulos[camada.id];
+      if (rotulo) {
+        camada.minzoom = rotulo.minzoom;
+        camada.layout = {...camada.layout,
+          'symbol-placement':'line-center',
+          'text-field':['coalesce',['get','name:pt'],['get','name'],''],
+          'text-font':['Noto Sans Medium'],
+          'text-size':rotulo.tamanho,
+          'text-rotation-alignment':'viewport',
+          'text-pitch-alignment':'viewport',
+          'text-padding':2,
+          'text-allow-overlap':false};
+        camada.paint = {...camada.paint,'text-color':ruas.texto,
+          'text-halo-color':ruas.contornoTexto,'text-halo-width':1.5};
+      }
+      if (camada.type === 'line' && camada.id.startsWith('roads_')) {
+        if (camada.id.endsWith('_casing')) camada.paint['line-color'] = ruas.contornoVias;
+        else if (camada.id.endsWith('_major')) camada.paint['line-color'] = ruas.viaPrincipal;
+        else if (camada.id.endsWith('_highway')) camada.paint['line-color'] = ruas.rodovia;
+      }
+    }
+    // A âncora central preserva os rótulos originais. A repetição orientada
+    // pela via preenche trechos livres quando o centro fica fora da tela.
+    modelo.layers = modelo.layers.flatMap(camada => {
+      if (!ruas.rotulos[camada.id]) return [camada];
+      const repetida = structuredClone(camada);
+      repetida.id += '_repeat';
+      repetida.layout = {...repetida.layout,
+        'symbol-placement':'line', 'symbol-spacing':180,
+        'text-rotation-alignment':'map', 'text-max-angle':45};
+      return [repetida, camada];
+    });
+    modelo.glyphs = location.origin + '/mapas/assets/fonts/{fontstack}/{range}.pbf';
+    modelo.sprite = location.origin + '/mapas/assets/sprites/v4/light';
+    function estilo(atual) {
+      const copia = structuredClone(modelo);
+      const arquivo = atual === 'continente' ? 'america-sul.pmtiles' : atual === 'curitiba' ? 'curitiba.pmtiles' : 'panorama.pmtiles';
+      copia.sources.protomaps.url = 'pmtiles://' + location.origin + '/mapas/' + arquivo;
+      return copia;
+    }
+    function aviso() {
+      geral.textContent = completo ? 'América do Sul' : 'Visão geral';
+      cidade.hidden = !curitiba || completo;
+      geral.setAttribute('aria-pressed', String(modo !== 'curitiba'));
+      cidade.setAttribute('aria-pressed', String(modo === 'curitiba'));
+      status.textContent = modo === 'continente'
+        ? 'Mapa detalhado local. Busque um endereço, amplie para ver ruas ou abra Traçar caminho offline.'
+        : modo === 'curitiba'
+        ? 'Ruas locais de Curitiba e arredores prontas. Restante da América do Sul ainda baixando.'
+        : 'Visão geral com zoom limitado. Ruas do continente ainda baixando.';
+    }
+    maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
+    const map = new maplibregl.Map({container:'map',style:estilo(modo),
+      center:modo === 'curitiba' ? [-49.27,-25.43] : [-59,-20],
+      zoom:modo === 'curitiba' ? 12 : 2.6,
+      maxZoom:modo === 'panorama' ? 8 : 18,
+      maxBounds:modo === 'curitiba' ? limitesCuritiba : undefined,
+      attributionControl:{compact:true, customAttribution:'© colaboradores do OpenStreetMap · Protomaps'}});
+    map.addControl(new maplibregl.NavigationControl());
+    map.addControl(new maplibregl.ScaleControl({unit:'metric'}));
+    const rotas = instalarRotas(map);
+    instalarBusca(map, rotas);
+    function trocar(novo, reposicionar) {
+      modo = novo;
+      map.setMaxBounds(novo === 'curitiba' ? limitesCuritiba : null);
+      map.setMaxZoom(novo === 'panorama' ? 8 : 18);
+      map.setStyle(estilo(novo));
+      if (reposicionar) map.jumpTo(novo === 'curitiba' ? {center:[-49.27,-25.43],zoom:12} : {center:[-59,-20],zoom:2.6});
+      aviso();
+    }
+    geral.onclick = () => trocar(completo ? 'continente' : 'panorama', true);
+    cidade.onclick = () => trocar('curitiba', true);
+    map.on('load', aviso);
+    map.on('error', e => {status.textContent = 'Não foi possível carregar uma parte do mapa. ' + (e.error?.message || '');});
+    aviso();
+    const verificar = setInterval(async () => {
+      if (await disponivel('america-sul.pmtiles')) {
+        completo = true;
+        clearInterval(verificar);
+        trocar('continente', false);
+      } else if (!curitiba && await disponivel('curitiba.pmtiles')) {
+        curitiba = true;
+        trocar('curitiba', true);
+      }
+    }, 30000);
+    if (completo) clearInterval(verificar);
+  } catch (e) {
+    status.textContent = 'Falha ao abrir o mapa: ' + e.message;
+  }
+}
+iniciar();
+</script>
+</html>

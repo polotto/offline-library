@@ -1,0 +1,92 @@
+{{define "topo"}}<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{.Catalogo}}</title>
+<link rel="icon" href="data:,">
+<style>
+:root{--fundo:#f3f0e8;--texto:#22332c;--suave:#526057;--borda:#cbd3c5;--cartao:#fffdf7;--verde:#236645;--erro:#8d251d}
+*{box-sizing:border-box}body{margin:0;background:var(--fundo);color:var(--texto);font:17px/1.55 system-ui,sans-serif}
+main{max-width:1000px;margin:auto;padding:28px 16px 60px}a{color:var(--verde)}
+header.topo{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;border-bottom:1px solid #bcc8bd;padding-bottom:16px;margin-bottom:22px}
+header.topo h1{font:30px Georgia,serif;margin:0;flex:1 1 auto}header.topo h1 a{color:inherit;text-decoration:none}
+.acoes{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,.botao{font:inherit;font-size:15px;border:1px solid var(--verde);background:var(--cartao);color:var(--verde);border-radius:6px;padding:6px 12px;cursor:pointer;text-decoration:none;display:inline-block}
+.botao.forte,button.forte{background:var(--verde);color:#fff}button.perigo{border-color:var(--erro);color:var(--erro)}
+form.busca{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}form.busca input[type=search]{flex:1 1 240px}
+input,select,textarea{font:inherit;font-size:16px;border:1px solid #9aa79c;border-radius:6px;padding:7px 9px;background:#fff;color:inherit;max-width:100%}
+textarea{width:100%;min-height:90px}
+.cartao{background:var(--cartao);border:1px solid var(--borda);border-radius:10px;padding:18px 20px;margin:0 0 12px}
+.cartao h2{font:22px Georgia,serif;margin:0 0 4px}.cartao h2 a{text-decoration:none;color:inherit}
+.meta{color:var(--suave);font-size:15px;margin:0}.tags{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0;padding:0;list-style:none}
+.tags a{font-size:13px;background:#e2efe5;color:#1d5a3b;border-radius:20px;padding:2px 10px;text-decoration:none}
+.privado{font-size:12px;background:#f5ecd8;color:#6d4a0c;border-radius:4px;padding:1px 6px;margin-left:6px}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}dt{color:var(--suave)}dd{margin:0;overflow-wrap:anywhere}
+label{display:block;font-weight:600;margin:14px 0 4px}.ajuda{font-size:14px;color:var(--suave);margin:2px 0 0}
+.campo input[type=text],.campo input[type=password],.campo select{width:100%}
+.erro{background:#f6e1de;color:var(--erro);border-radius:6px;padding:8px 12px}
+.filtros{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px;font-size:14px}.filtros a.ativo{font-weight:700}
+.arquivos{list-style:none;padding:0;margin:8px 0 0}.arquivos li{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #e3e6dc}
+@media(max-width:600px){dl{grid-template-columns:1fr}dt{font-weight:600;color:var(--texto)}}
+</style>
+<main>
+<header class="topo"><h1><a href="/catalogo/">{{.Catalogo}}</a></h1><nav class="acoes"><a href="/">Início</a>
+{{if .Usuario}}<a class="botao forte" href="/catalogo/novo">Adicionar item</a><form method="post" action="/catalogo/sair"><button>Sair</button></form>
+{{else}}<a class="botao" href="/catalogo/entrar">Entrar</a>{{end}}</nav></header>
+{{end}}
+
+{{define "fim"}}</main></html>{{end}}
+
+{{define "lista"}}{{template "topo" .}}
+<form class="busca" role="search" action="/catalogo/"><input type="search" name="q" value="{{.Q}}" placeholder="Título, autor, assunto ou palavra" aria-label="Buscar no catálogo">
+{{if .Idiomas}}<select name="idioma" aria-label="Idioma"><option value="">Todos os idiomas</option>{{range .Idiomas}}<option {{if eq . $.Idioma}}selected{{end}}>{{.}}</option>{{end}}</select>{{end}}
+{{if .Tag}}<input type="hidden" name="tag" value="{{.Tag}}">{{end}}<button class="forte">Buscar</button>{{if or .Q .Tag .Idioma}}<a class="botao" href="/catalogo/">Limpar</a>{{end}}</form>
+{{if .Tags}}<div class="filtros" aria-label="Tags">Tags: {{range .Tags}}<a href="/catalogo/?tag={{query .}}" {{if eq . $.Tag}}class="ativo"{{end}}>{{.}}</a>{{end}}</div>{{end}}
+<p class="meta">{{len .Itens}} {{if eq (len .Itens) 1}}item{{else}}itens{{end}}{{if .Tag}} com a tag “{{.Tag}}”{{end}}.</p>
+{{range .Itens}}<article class="cartao"><h2><a href="/catalogo/item/{{.ID}}">{{.Titulo}}</a>{{if not .Publico}}<span class="privado">Privado</span>{{end}}</h2>
+<p class="meta">{{juntar .ListaAutores ", "}}{{if .Data}} · {{.Data}}{{end}}{{if .Idioma}} · {{.Idioma}}{{end}}{{if .Tipo}} · {{.Tipo}}{{end}}</p>
+{{if .Tags}}<ul class="tags">{{range .Tags}}<li><a href="/catalogo/?tag={{query .}}">{{.}}</a></li>{{end}}</ul>{{end}}</article>
+{{else}}<p>Nenhum item encontrado.{{if $.Usuario}} Use “Adicionar item” para cadastrar.{{end}}</p>{{end}}
+{{template "fim" .}}{{end}}
+
+{{define "item"}}{{template "topo" .}}{{with .Item}}
+<article class="cartao"><h2>{{.Titulo}}{{if not .Publico}}<span class="privado">Privado</span>{{end}}</h2>
+<dl>{{if .Autores}}<dt>Autor</dt><dd>{{juntar .ListaAutores ", "}}</dd>{{end}}
+{{if .Data}}<dt>Data</dt><dd>{{.Data}}</dd>{{end}}{{if .Idioma}}<dt>Idioma</dt><dd><a href="/catalogo/?idioma={{query .Idioma}}">{{.Idioma}}</a></dd>{{end}}
+{{if .Assunto}}<dt>Assunto</dt><dd>{{.Assunto}}</dd>{{end}}{{if .Tipo}}<dt>Tipo</dt><dd>{{.Tipo}}</dd>{{end}}
+{{if .Descricao}}<dt>Descrição</dt><dd style="white-space:pre-line">{{.Descricao}}</dd>{{end}}</dl>
+{{if .Tags}}<ul class="tags">{{range .Tags}}<li><a href="/catalogo/?tag={{query .}}">{{.}}</a></li>{{end}}</ul>{{end}}
+{{if .Arquivos}}<h3>Arquivos</h3><ul class="arquivos">{{range .Arquivos}}<li><a href="/catalogo/arquivo/{{.ID}}">{{.Nome}}</a><span class="meta">{{.TamanhoLegivel}}</span></li>{{end}}</ul>{{end}}
+</article>
+{{if $.Usuario}}<div class="acoes"><a class="botao" href="/catalogo/item/{{.ID}}/editar">Editar</a>
+<form method="post" action="/catalogo/item/{{.ID}}/apagar" onsubmit="return confirm('Apagar este item e seus arquivos?')"><button class="perigo">Apagar</button></form></div>{{end}}
+{{end}}<p><a href="/catalogo/">Voltar à lista</a></p>{{template "fim" .}}{{end}}
+
+{{define "form"}}{{template "topo" .}}{{with .Item}}
+<h2>{{if $.Novo}}Adicionar item{{else}}Editar item{{end}}</h2>
+<form method="post" enctype="multipart/form-data" action="{{if $.Novo}}/catalogo/novo{{else}}/catalogo/item/{{.ID}}/editar{{end}}">
+<div class="campo"><label for="titulo">Título</label><input type="text" id="titulo" name="titulo" required value="{{.Titulo}}"></div>
+<div class="campo"><label for="autores">Autor</label><textarea id="autores" name="autores" rows="2">{{.Autores}}</textarea><p class="ajuda">Um autor por linha.</p></div>
+<div class="campo"><label for="idioma">Idioma</label><input type="text" id="idioma" name="idioma" value="{{.Idioma}}" list="idiomas"><datalist id="idiomas"><option value="pt-BR"><option value="en"><option value="es"></datalist><p class="ajuda">Use sempre o mesmo código: pt-BR, en ou es.</p></div>
+<div class="campo"><label for="assunto">Assunto</label><input type="text" id="assunto" name="assunto" value="{{.Assunto}}"></div>
+<div class="campo"><label for="data">Data</label><input type="text" id="data" name="data" value="{{.Data}}" placeholder="2024 ou 2024-05-10"></div>
+<div class="campo"><label for="tipo">Tipo</label><input type="text" id="tipo" name="tipo" value="{{.Tipo}}" placeholder="Livro, Artigo, Revista, Áudio..."></div>
+<div class="campo"><label for="descricao">Descrição</label><textarea id="descricao" name="descricao">{{.Descricao}}</textarea></div>
+<div class="campo"><label for="tags">Tags</label><input type="text" id="tags" name="tags" value="{{$.TagsTexto}}"><p class="ajuda">Palavras-chave separadas por vírgula.</p></div>
+<label><input type="checkbox" name="publico" value="1" {{if .Publico}}checked{{end}}> Público: todos da casa veem o item</label>
+{{if .Arquivos}}<h3>Arquivos atuais</h3><ul class="arquivos">{{range .Arquivos}}<li><a href="/catalogo/arquivo/{{.ID}}">{{.Nome}}</a><span class="meta">{{.TamanhoLegivel}}</span><button class="perigo" formaction="/catalogo/arquivo/{{.ID}}/apagar" formnovalidate onclick="return confirm('Remover este arquivo?')">Remover</button></li>{{end}}</ul>{{end}}
+<div class="campo"><label for="arquivos">Anexar arquivos</label><input type="file" id="arquivos" name="arquivos" multiple><p class="ajuda">Livros (EPUB, PDF), imagens, áudio, vídeo e arquivos compactados. Programas executáveis não são aceitos.</p></div>
+<p class="acoes"><button class="forte">{{if $.Novo}}Adicionar item{{else}}Salvar{{end}}</button><a href="{{if $.Novo}}/catalogo/{{else}}/catalogo/item/{{.ID}}{{end}}">Cancelar</a></p>
+</form>{{end}}{{template "fim" .}}{{end}}
+
+{{define "entrar"}}{{template "topo" .}}
+<form class="cartao" method="post" action="/catalogo/entrar" style="max-width:420px">
+<h2>{{if .Primeiro}}Criar administrador{{else}}Entrar{{end}}</h2>
+{{if .Primeiro}}<p class="meta">Ainda não há administrador. Escolha nome e senha para cadastrar itens.</p>{{end}}
+{{if .Erro}}<p class="erro" role="alert">{{.Erro}}</p>{{end}}
+<input type="hidden" name="voltar" value="{{.Voltar}}">
+<div class="campo"><label for="nome">Nome</label><input type="text" id="nome" name="nome" required autocomplete="username" value="{{.Nome}}"></div>
+<div class="campo"><label for="senha">Senha</label><input type="password" id="senha" name="senha" required autocomplete="{{if .Primeiro}}new-password{{else}}current-password{{end}}"></div>
+{{if .Primeiro}}<div class="campo"><label for="senha2">Repita a senha</label><input type="password" id="senha2" name="senha2" required autocomplete="new-password"></div>{{end}}
+<p><button class="forte">{{if .Primeiro}}Criar e entrar{{else}}Entrar{{end}}</button></p>
+</form>{{template "fim" .}}{{end}}

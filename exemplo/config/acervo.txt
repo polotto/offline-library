@@ -1,0 +1,8 @@
+# Coleções Kiwix desejadas: categoria e arquivo de referência.
+# O atualizador procura edições mais novas do mesmo nome.
+wiktionary wiktionary_pt_all_nopic_2026-09.zim
+wiktionary wiktionary_es_all_nopic_2026-09.zim
+wiktionary wiktionary_en_all_nopic_2026-11.zim
+wikipedia wikipedia_pt_all_maxi_2026-05.zim
+wikipedia wikipedia_es_all_maxi_2026-10.zim
+wikipedia wikipedia_en_all_maxi_2026-08.zim

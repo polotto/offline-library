@@ -1,0 +1,21 @@
+# Serviço systemd para um servidor Linux fixo. Ajuste DADOS e o usuário,
+# copie para /etc/systemd/system/lab.service e rode:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now lab
+[Unit]
+Description=Biblioteca offline
+After=network-online.target local-fs.target
+Wants=network-online.target
+RequiresMountsFor=/srv/offline
+
+[Service]
+User=lab
+Environment=GOMEMLIMIT=400MiB
+ExecStart=/srv/offline/LabOffline/bin/lab-linux-amd64 servir --dados /srv/offline/LabOffline
+Restart=on-failure
+RestartSec=10
+# Kiwix e Java são filhos do lab e saem junto.
+KillMode=control-group
+MemoryMax=1200M
+
+[Install]
+WantedBy=multi-user.target

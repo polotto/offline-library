@@ -1,0 +1,16 @@
+body{grid-template-rows:auto auto minmax(0,1fr)}
+#rota-painel{border-top:1px solid #cbd3c5;border-bottom:1px solid #cbd3c5;background:#fffdf7;padding:8px 18px;font-size:14px;max-height:45dvh;overflow:auto;box-sizing:border-box}
+#rota-painel summary{cursor:pointer;font-weight:650;padding:3px 0}
+#rota-form p{margin:8px 0;max-width:850px;line-height:1.4}
+.rota-pontos,.rota-acoes{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:8px 0}
+.rota-pontos>div{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.rota-pontos output{font-variant-numeric:tabular-nums;font-size:12px;color:#526057}
+.rota-acoes select{font:inherit;border:1px solid #52745b;background:white;border-radius:5px;padding:5px;color:inherit}
+#rota-painel button{min-height:34px}
+#rota-calcular{background:#173c36;color:white;font-weight:650}
+#rota-painel button:disabled{opacity:.5;cursor:default}
+#rota-painel :focus-visible{outline:3px solid #cb8621;outline-offset:2px}
+#rota-estado[data-erro=true]{color:#9a281b}
+.rota-marcador{width:30px;height:30px;border:3px solid white;border-radius:50%;box-shadow:0 1px 5px #0008;background:#173c36;color:white;font:bold 16px system-ui;text-align:center;line-height:30px;cursor:grab}
+.rota-marcador.destino{background:#ad4521}
+@media(max-width:600px){#rota-painel{padding:7px 12px;max-height:43dvh}#rota-ajuda{font-size:12px}.rota-pontos{gap:6px}.rota-pontos>div{width:100%}.rota-acoes{gap:6px}#rota-estado{font-size:12px}}

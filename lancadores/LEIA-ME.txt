@@ -1,0 +1,24 @@
+BIBLIOTECA OFFLINE
+
+Enciclopédia, mapas com busca e caminhos, e biblioteca de arquivos.
+Funciona sem internet e sem instalar nada.
+
+COMO INICIAR
+  Mac:      clique duas vezes em iniciar.command
+  Windows:  clique duas vezes em iniciar.bat
+  Linux:    abra o terminal nesta pasta e rode: sh iniciar.sh
+
+O navegador abre em http://127.0.0.1:8087. Outros aparelhos da mesma
+rede usam o endereço mostrado na janela. Na primeira vez, o Mac e o
+Windows perguntam se o programa pode aceitar conexões da rede: permita
+só se outros aparelhos forem usar.
+
+Para parar, feche a janela ou aperte Ctrl+C.
+
+SISTEMAS ATENDIDOS
+  Linux (x86_64 e ARM 64 bits), Mac com processador Apple ou Intel,
+  Windows 64 bits.
+
+CUIDADOS
+  Use o disco em um computador por vez.
+  Ejete o disco pelo sistema antes de desconectar.

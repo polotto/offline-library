@@ -1,0 +1,15 @@
+#busca{position:relative;flex:1 1 260px;max-width:460px;margin:0}
+#busca-texto{width:100%;box-sizing:border-box;font:inherit;font-size:15px;padding:7px 10px;border:1px solid #52745b;border-radius:6px;background:#fff;color:inherit}
+#busca-texto:disabled{background:#eee;color:#666}
+#busca-lista{position:absolute;z-index:5;left:0;right:0;top:calc(100% + 4px);margin:0;padding:4px 0;list-style:none;background:#fffdf7;border:1px solid #cbd3c5;border-radius:8px;box-shadow:0 6px 18px #0003;max-height:60dvh;overflow:auto}
+#busca-lista li{display:flex;align-items:stretch;gap:4px;padding:2px 6px}
+#busca-lista li[aria-selected=true]{background:#e2efe5}
+#busca-lista button{font:inherit;border:0;background:none;color:inherit;cursor:pointer;border-radius:5px}
+#busca-lista button:hover,#busca-lista button:focus-visible{background:#e2efe5}
+.busca-ir{flex:1;text-align:left;padding:5px 6px;min-width:0}
+.busca-ir b{display:block;font-weight:600;overflow-wrap:anywhere}
+.busca-ir small{display:block;color:#526057;font-size:12px}
+#busca-lista li>button:not(.busca-ir){width:32px;font-weight:700;color:#173c36}
+.busca-vazio{padding:8px 12px!important;font-size:14px;color:#526057}
+.busca-marcador{width:18px;height:18px;border-radius:50%;background:#cb8621;border:3px solid #fff;box-shadow:0 1px 5px #0008}
+@media(max-width:600px){#busca{flex-basis:100%;max-width:none;order:5}}

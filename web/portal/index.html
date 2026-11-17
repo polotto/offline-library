@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Biblioteca da casa</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f0e8;color:#22332c;font:17px/1.6 system-ui,sans-serif}main{max-width:1050px;margin:auto;padding:70px 24px}header{border-bottom:1px solid #bcc8bd;padding-bottom:28px;margin-bottom:32px}.eyebrow{font-size:13px;letter-spacing:.15em;text-transform:uppercase;color:#52745b}h1{font:clamp(36px,7vw,62px)/1.15 Georgia,serif;margin:16px 0}header p{max-width:600px;color:#526057}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}.card{display:block;background:#fffdf7;border:1px solid #cbd3c5;border-radius:10px;padding:26px;color:inherit;text-decoration:none}.card:hover,.card:focus-visible{border-color:#236645;outline:2px solid #236645;outline-offset:3px}h2{font:27px Georgia,serif;margin:0 0 14px}.card p{color:#526057;margin:0 0 24px}.open{color:#236645;font-weight:650}footer{margin-top:40px;font-size:14px;color:#526057}code{overflow-wrap:anywhere}.estado{display:block;font-size:14px;margin:0 0 18px;padding:6px 10px;border-radius:6px;background:#eef1e9;color:#3d4a42}.estado.pronto{background:#e2efe5;color:#1d5a3b}.estado.falha{background:#f6e1de;color:#8d251d}.estado.andamento{background:#f5ecd8;color:#6d4a0c}#colecoes{list-style:none;padding:0;margin:0 0 18px;font-size:14px}#colecoes li{padding:5px 0;border-top:1px solid #e3e6dc}#colecoes b{font-weight:650}#colecoes small{display:block;color:#526057}progress{width:100%;height:8px;accent-color:#236645}#situacao{font-size:14px;color:#526057;margin:22px 0 0}
+#ajuda{margin-top:56px;border-top:1px solid #bcc8bd;padding-top:32px}#ajuda>p{max-width:640px;color:#526057;margin:0 0 20px}
+#ajuda details{background:#fffdf7;border:1px solid #cbd3c5;border-radius:10px;margin:0 0 12px}
+#ajuda summary{cursor:pointer;padding:16px 22px;font:21px Georgia,serif}#ajuda summary:focus-visible{outline:2px solid #236645;outline-offset:3px}
+#ajuda .corpo{padding:0 22px 18px;color:#3d4a42}#ajuda .corpo p{margin:0 0 12px}#ajuda ol,#ajuda ul{margin:0 0 12px;padding-left:22px}#ajuda li{margin:0 0 6px}
+</style>
+<main>
+<header><div class="eyebrow">Acervo local</div><h1 id="nome">Biblioteca da casa</h1><p>Conhecimento, mapas e arquivos para consultar nos computadores e celulares conectados à rede de casa.</p></header>
+<section class="cards" aria-label="Serviços">
+<a class="card" href="/wiki/" target="_blank" rel="noopener noreferrer"><h2>Enciclopédia e dicionários</h2><p>Wikipédia e Wikcionário em português, inglês e espanhol. Cada coleção aparece quando seu download termina.</p><span class="estado" id="e-enciclopedia">Consultando situação...</span><ul id="colecoes"></ul><span class="open">Abrir coleções →</span></a>
+<a class="card" href="/mapas/" target="_blank" rel="noopener noreferrer"><h2>Mapas</h2><p>América do Sul offline, com ruas, busca de endereços e cálculo de caminhos.</p><span class="estado" id="e-mapas">Consultando situação...</span><span class="open">Explorar o mapa →</span></a>
+<a class="card" href="/catalogo/" target="_blank" rel="noopener noreferrer"><h2>Biblioteca de arquivos</h2><p>Acervo com autor, idioma, assunto e etiquetas. Consulte os registros ou entre para cadastrar novos arquivos.</p><span class="estado" id="e-catalogo">Consultando situação...</span><span class="open">Consultar a biblioteca →</span></a>
+</section>
+<p id="situacao" role="status">Consultando situação...</p>
+<p id="atualizacoes" class="estado" role="status">Atualizações automáticas: consultando situação...</p>
+<section id="ajuda" aria-labelledby="ajuda-titulo">
+<h2 id="ajuda-titulo">Como usar</h2>
+<p>Tudo funciona sem internet, em qualquer computador ou celular ligado à rede de casa. Os links acima abrem cada serviço em uma nova aba.</p>
+<details><summary>Para que serve cada coisa</summary><div class="corpo"><ul>
+<li><b>Enciclopédia e dicionários:</b> Wikipédia e Wikcionário inteiros, para ler artigos e consultar palavras.</li>
+<li><b>Mapas:</b> América do Sul com ruas, para buscar endereços e lugares e calcular caminhos de carro, bicicleta ou a pé.</li>
+<li><b>Biblioteca de arquivos:</b> livros, documentos, imagens, áudios e vídeos da casa, com autor, idioma, assunto e etiquetas.</li>
+<li><b>Situação:</b> as faixas acima mostram o que está disponível e o espaço livre no disco.</li>
+</ul></div></details>
+<details><summary>Pesquisar na enciclopédia</summary><div class="corpo"><ol>
+<li>Abra <b>Enciclopédia e dicionários</b>. Aparece a lista de coleções.</li>
+<li>Para achar uma coleção, use o campo <b>Search</b> e os filtros de idioma e categoria no alto da lista.</li>
+<li>Clique na coleção, por exemplo a Wikipédia em português.</li>
+<li>Digite o assunto no campo de busca no alto da página. Escolha uma sugestão para ir direto ao artigo ou tecle Enter para ver todos os resultados.</li>
+<li>O botão da casa volta à lista de coleções. O botão do dado abre um artigo ao acaso.</li>
+</ol><p>A busca vale para a coleção aberta. Para procurar uma palavra, abra o Wikcionário do idioma. A tela vem em inglês; o seletor de idioma no canto muda para português.</p></div></details>
+<details><summary>Usar o mapa e traçar caminhos</summary><div class="corpo"><ol>
+<li>Abra <b>Mapas</b>. Arraste para mover. Use a roda do mouse ou dois dedos para aproximar.</li>
+<li>Para achar um lugar, digite no campo <b>Buscar endereço ou lugar</b>, por exemplo "Rua XV de Novembro Curitiba" ou "farmácia". Os botões A e B ao lado de cada resultado o usam como origem ou destino.</li>
+<li>Para um caminho, abra <b>Traçar caminho offline</b>.</li>
+<li>Clique em <b>Marcar origem A</b> e depois no ponto de saída. Faça o mesmo com <b>Marcar destino B</b>.</li>
+<li>Escolha carro, bicicleta ou a pé e clique em <b>Calcular caminho</b>. O mapa mostra a linha, a distância e o tempo estimado.</li>
+</ol><p>Você pode arrastar os marcadores, usar <b>Inverter</b> ou <b>Limpar</b>. Não há trânsito nem navegação por voz. Para trajetos muito longos, divida o caminho em partes.</p></div></details>
+<details><summary>Consultar a biblioteca de arquivos</summary><div class="corpo"><ol>
+<li>Abra <b>Biblioteca de arquivos</b>. Aparece a lista de itens.</li>
+<li>Use a busca para procurar por título, autor, assunto ou palavra. O filtro de idioma e as tags reduzem a lista.</li>
+<li>Clique numa tag de um item para ver outros parecidos.</li>
+<li>Na página do item, clique no arquivo para abrir ou baixar.</li>
+</ol></div></details>
+<details><summary>Adicionar livros e arquivos na biblioteca</summary><div class="corpo"><ol>
+<li>Abra a biblioteca e clique em <b>Entrar</b>. Na primeira vez, a tela pede para criar o administrador.</li>
+<li>Clique em <b>Adicionar item</b>.</li>
+<li>Preencha Título, Autor (um por linha), Idioma, Assunto, Data, Tipo e Descrição.</li>
+<li>Em <b>Tags</b>, coloque palavras-chave separadas por vírgula. Em <b>Anexar arquivos</b>, escolha o livro ou documento.</li>
+<li>Deixe <b>Público</b> marcado para que todos da casa vejam o item e clique em <b>Adicionar item</b>.</li>
+</ol><p>Use sempre os mesmos termos, por exemplo idioma <code>pt-BR</code>, <code>en</code> ou <code>es</code>, para os filtros funcionarem. Aceita livros EPUB, PDF, imagens, áudio, vídeo e arquivos compactados. Programas executáveis não são aceitos. Sem a opção Público, o item fica visível só para quem entrou.</p></div></details>
+<details><summary>Atualizações e cuidados</summary><div class="corpo"><ul>
+<li>Toda madrugada o servidor confere se há edições novas. A Wikipédia e os dicionários são atualizados por semana, os mapas por mês. Sem internet, a atualização fica para depois e o acervo continua disponível.</li>
+<li>Mantenha o computador ligado e o disco do acervo conectado. Se a situação acima ficar parada ou os serviços não abrirem, confira o cabo do disco.</li>
+<li>Os itens da biblioteca de arquivos só existem neste disco. Não são publicados na internet.</li>
+</ul></div></details>
+</section>
+<footer>Tudo roda a partir do disco do acervo, sem instalar nada. Após os downloads, a consulta dispensa internet. <span id="versao"></span></footer>
+</main>
+<script>
+const rotulos = {pronto:'Disponível', baixando:'Baixando', conferindo:'Conferindo', fila:'Na fila', parado:'Em pausa', falha:'Com falha', pendente:'Pendente', iniciando:'Iniciando'};
+function marcar(id, parte) {
+  const alvo = document.getElementById(id);
+  if (!parte) return;
+  alvo.className = 'estado ' + (parte.estado === 'pronto' ? 'pronto' : parte.estado === 'falha' ? 'falha' : 'andamento');
+  alvo.textContent = (rotulos[parte.estado] || parte.estado) + '. ' + parte.detalhe;
+}
+let ultima = null;
+function idade() {
+  if (!ultima) return;
+  const s = Math.max(0, Math.round((Date.now() - ultima.quando) / 1000));
+  document.getElementById('situacao').textContent = ultima.texto + ' Atualizado há ' + (s < 90 ? s + ' s' : Math.round(s / 60) + ' min') + '.';
+}
+async function atualizar() {
+  try {
+    const r = await fetch('./estado.json', {cache:'no-store'});
+    if (!r.ok) throw Error();
+    const d = await r.json();
+    document.getElementById('nome').textContent = d.nome;
+    document.title = d.nome;
+    document.getElementById('versao').textContent = 'Versão ' + d.versao + ', ' + d.plataforma + '.';
+    marcar('e-enciclopedia', d.enciclopedia); marcar('e-mapas', d.mapas); marcar('e-catalogo', d.catalogo);
+    document.getElementById('colecoes').replaceChildren(...(d.colecoes || []).map(c => {
+      const li = document.createElement('li'), nome = document.createElement('b'), det = document.createElement('small');
+      nome.textContent = c.titulo + ' · ' + (rotulos[c.estado] || c.estado);
+      det.textContent = c.detalhe + (c.edicao ? ' Edição ' + c.edicao + '.' : '');
+      li.append(nome, det);
+      if (c.pct !== undefined) { const p = document.createElement('progress'); p.max = 100; p.value = c.pct; p.setAttribute('aria-label', c.titulo + ' ' + c.pct + '%'); li.append(p); }
+      return li;
+    }));
+    if (d.atualizacoes) {
+      const alvo = document.getElementById('atualizacoes');
+      alvo.className = 'estado ' + (d.atualizacoes.estado === 'falha' ? 'falha' : d.atualizacoes.estado === 'pronto' ? 'pronto' : 'andamento');
+      alvo.textContent = 'Atualizações automáticas: ' + d.atualizacoes.detalhe + ' Wikipédia e dicionários: semanal. Mapas: mensal.';
+    }
+    ultima = {quando: Date.now(), texto: d.disco ? 'Disco: ' + d.disco.livre + ' livres de ' + d.disco.total + '.' : ''};
+    idade();
+  } catch (_) {
+    document.getElementById('situacao').textContent = 'Situação indisponível no momento. Nova tentativa em instantes.';
+  }
+}
+atualizar(); setInterval(atualizar, 20000); setInterval(idade, 5000);
+</script>
+</html>
