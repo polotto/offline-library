@@ -121,7 +121,7 @@ func (p *Processo) Rodar(ctx context.Context) {
 		}
 		p.mu.Lock()
 		p.cmd, p.Porta = cmd, porta
-		p.estado, p.detalhe = "iniciando", "Iniciando."
+		p.estado, p.detalhe = "iniciando", "Abrindo."
 		p.mu.Unlock()
 		log.Printf("%s: iniciado na porta interna %d (PID %d)", p.Nome, porta, cmd.Process.Pid)
 		terminou := make(chan error, 1)

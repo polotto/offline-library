@@ -110,8 +110,7 @@ async function iniciar() {
       center:modo === 'curitiba' ? [-49.27,-25.43] : [-59,-20],
       zoom:modo === 'curitiba' ? 12 : 2.6,
       maxZoom:modo === 'panorama' ? 8 : 18,
-      maxBounds:modo === 'curitiba' ? limitesCuritiba : undefined,
-      attributionControl:{compact:true, customAttribution:'© colaboradores do OpenStreetMap · Protomaps'}});
+      maxBounds:modo === 'curitiba' ? limitesCuritiba : undefined});
     map.addControl(new maplibregl.NavigationControl());
     map.addControl(new maplibregl.ScaleControl({unit:'metric'}));
     const rotas = instalarRotas(map);
