@@ -7,5 +7,7 @@
   "atualizar": true,
   "hora_atualizacao": 3,
   "memoria_rotas_mb": 192,
-  "portas_antigas": {}
+  "portas_antigas": {},
+  "pasta_trabalho": "",
+  "osm": "https://download.geofabrik.de/south-america-latest.osm.pbf"
 }

@@ -22,6 +22,8 @@ const ajuda = `Uso: lab [comando] [opções]
 Comandos:
   servir            sobe a biblioteca (padrão)
   gerar-busca       gera mapas/busca.db a partir de um arquivo .osm.pbf
+  atualizar-busca   baixa o OpenStreetMap, confere, gera e instala a busca de endereços
+  atualizar         faz agora uma rodada completa de atualização
   preparar-runtime  baixa Kiwix, Java e pmtiles oficiais para cada sistema (precisa de internet)
   importar-omeka    importa itens exportados do Omeka para o catálogo
   usuario           cria ou troca a senha de um administrador do catálogo
@@ -65,6 +67,7 @@ func main() {
 	exportacao := fs.String("json", "", "exportação do Omeka (importar-omeka)")
 	arquivos := fs.String("arquivos", "", "pasta files/original do Omeka (importar-omeka)")
 	nome := fs.String("nome", "", "nome do usuário (usuario)")
+	versaoBusca := fs.String("versao-busca", "", "registra a versão do índice gerado (gerar-busca)")
 	plataformas := fs.String("plataformas", "todas", "lista separada por vírgula (preparar-runtime)")
 	fs.Usage = func() { fmt.Fprint(os.Stderr, ajuda); fs.PrintDefaults() }
 	_ = fs.Parse(args)
@@ -114,6 +117,18 @@ func main() {
 			out = cfg.Caminho("mapas", "busca.db")
 		}
 		if err := lab.GerarBusca(ctx, *pbf, out); err != nil {
+			log.Fatal(err)
+		}
+		if *versaoBusca != "" {
+			if err := lab.RegistrarBusca(&cfg, *versaoBusca, *pbf); err != nil {
+				log.Fatal(err)
+			}
+		}
+	case "atualizar-busca", "atualizar":
+		a := lab.NovoAtualizador(&cfg, lab.NovoProcesso("kiwix", cfg.Logs, cfg.Kiwix()), nil)
+		if comando == "atualizar" {
+			a.Executar(ctx)
+		} else if err := a.AtualizarBusca(ctx, true); err != nil {
 			log.Fatal(err)
 		}
 	case "preparar-runtime":

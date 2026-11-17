@@ -25,6 +25,11 @@ type Config struct {
 	// PortasAntigas redireciona portas de instalações anteriores para um
 	// caminho, por exemplo {"8088": "/wiki/"}, para manter favoritos.
 	PortasAntigas map[string]string `json:"portas_antigas"`
+	// PastaTrabalho recebe os arquivos grandes e temporários da busca de
+	// endereços. Num disco USB instável, use uma pasta do disco interno.
+	PastaTrabalho string `json:"pasta_trabalho"`
+	// OSM é o arquivo .osm.pbf da região da busca de endereços.
+	OSM string `json:"osm"`
 
 	Dados string `json:"-"`
 	Logs  string `json:"-"`

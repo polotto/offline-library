@@ -195,6 +195,14 @@ func (s *Servidor) calcularEstado() []byte {
 	if s.busca.pronta() {
 		mapa.Detalhe += " Busca por endereço disponível."
 	}
+	for _, chave := range []string{"mapas", "busca", "runtime"} {
+		if d := s.atualizador.progresso(chave); d != nil {
+			mapa.Detalhe += " " + d.texto
+			if d.pct != nil {
+				mapa.Detalhe += fmt.Sprintf(" (%d%%)", *d.pct)
+			}
+		}
+	}
 	resp["mapas"] = mapa
 	resp["catalogo"] = s.catalogo.estado()
 	if livre, total, err := EspacoDisco(c.Dados); err == nil {

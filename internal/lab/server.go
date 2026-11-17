@@ -52,7 +52,8 @@ func NovoServidor(cfg *Config) (*Servidor, error) {
 		filaRotas: make(chan struct{}, 1),
 		busca:     AbrirBusca(cfg),
 	}
-	s.atualizador = NovoAtualizador(cfg, s.kiwix)
+	s.atualizador = NovoAtualizador(cfg, s.kiwix, s.rotas)
+	s.atualizador.antesDeTrocarBusca = s.busca.Fechar
 	return s, nil
 }
 

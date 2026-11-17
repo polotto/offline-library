@@ -77,11 +77,24 @@ Playwright e cruzar com `./run.sh lab0-logs`.
 
 ## Busca de lugares
 
-O índice sai dos dados do OpenStreetMap (arquivo `.osm.pbf`, por exemplo
-da Geofabrik). O gerador lê o arquivo duas vezes para usar pouca memória.
+O índice sai dos dados do OpenStreetMap (arquivo `.osm.pbf`, por padrão
+o da América do Sul na Geofabrik). O gerador lê o arquivo duas vezes para
+usar pouca memória. Com internet, o `lab` faz tudo sozinho uma vez por mês,
+ou logo que falta o índice: baixa com retomada, confere o MD5 oficial,
+gera, copia para `mapas/busca.db`, confere a cópia e só então troca o
+índice em uso. Para forçar agora:
 
 ```sh
-lab gerar-busca --dados /caminho/LabOffline --pbf south-america-latest.osm.pbf
+lab atualizar-busca --dados /caminho/LabOffline
+```
+
+Em `config/lab.json`, `osm` troca a região e `pasta_trabalho` põe os
+arquivos grandes e temporários (cerca de 2,5 vezes o `.osm.pbf`) em outro
+disco. Use uma pasta do disco interno quando o disco do acervo for USB
+instável. Geração à mão, sem internet:
+
+```sh
+lab gerar-busca --dados /caminho/LabOffline --pbf arquivo.osm.pbf --versao-busca nome-datado
 ```
 
 Entram ruas, cidades e bairros, pontos com nome (farmácia, escola,
@@ -101,8 +114,10 @@ lab usuario --dados /caminho/LabOffline --nome admin   # senha pela entrada padr
 Com internet, o `lab` confere todo dia na hora configurada. Coleções Kiwix
 de `config/acervo.txt` são conferidas por semana: download com retomada,
 tamanho e SHA-256 oficiais, e só então entram no ar. O mapa é conferido por
-mês, recortado da geração mais nova do Protomaps. Sem internet ou sem
-espaço, nada muda.
+mês, recortado da geração mais nova do Protomaps, e a busca de endereços
+também. Se faltar um programa de apoio da plataforma em `runtime/`, ele é
+baixado e conferido de novo. Sem internet ou sem espaço, nada muda.
+`lab atualizar` faz uma rodada completa na hora.
 
 ## Licenças
 
