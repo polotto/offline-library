@@ -295,6 +295,9 @@ func GerarBusca(ctx context.Context, pbf, saida string) error {
 			return err
 		}
 		total++
+		if total%10000 == 0 && ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if total%200000 == 0 {
 			if err := tx.Commit(); err != nil {
 				return err
