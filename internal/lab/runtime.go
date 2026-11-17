@@ -298,4 +298,3 @@ func extrair(arquivo, destino string, escolher func(string) string) error {
 	}
 	return nil
 }
-

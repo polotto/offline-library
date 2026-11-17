@@ -70,12 +70,12 @@ type Catalogo struct {
 }
 
 type Item struct {
-	ID                                                   int64
-	Titulo, Autores, Idioma, Assunto, Descricao, Data    string
-	Tipo, Origem                                         string
-	Publico                                              bool
-	Tags                                                 []string
-	Arquivos                                             []Arquivo
+	ID                                                int64
+	Titulo, Autores, Idioma, Assunto, Descricao, Data string
+	Tipo, Origem                                      string
+	Publico                                           bool
+	Tags                                              []string
+	Arquivos                                          []Arquivo
 }
 
 type Arquivo struct {
@@ -464,7 +464,10 @@ func (c *Catalogo) formEditar(w http.ResponseWriter, r *http.Request) {
 	c.render(w, r, "form", map[string]any{"Item": i, "TagsTexto": strings.Join(i.Tags, ", ")})
 }
 
-type envio struct{ nome, tmp string; tamanho int64 }
+type envio struct {
+	nome, tmp string
+	tamanho   int64
+}
 
 // salvar lê o formulário em fluxo: arquivos vão direto ao disco, sem
 // passar pela memória nem pela pasta temporária do sistema.
