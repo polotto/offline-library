@@ -353,14 +353,21 @@ func GerarBusca(ctx context.Context, pbf, saida string) error {
 		   tokenize='unicode61 remove_diacritics 2', prefix='2 3')`,
 		`INSERT INTO lugares_fts(lugares_fts) VALUES('rebuild')`,
 		`INSERT INTO lugares_fts(lugares_fts) VALUES('optimize')`,
-		`VACUUM`,
 	} {
 		if _, err := db.Exec(q); err != nil {
 			return fmt.Errorf("%s: %w", strings.Fields(q)[0], err)
 		}
 	}
+	// Cópia compacta direto no destino: precisa de espaço só para ela, sem
+	// o diário de um VACUUM comum.
+	compacto := saida + ".compacto"
+	os.Remove(compacto)
+	if _, err := db.Exec(`VACUUM INTO ?`, compacto); err != nil {
+		return fmt.Errorf("VACUUM: %w", err)
+	}
 	db.Close()
-	if err := os.Rename(parcial, saida); err != nil {
+	os.Remove(parcial)
+	if err := os.Rename(compacto, saida); err != nil {
 		return err
 	}
 	st, _ := os.Stat(saida)
