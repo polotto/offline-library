@@ -256,7 +256,9 @@ func GerarBusca(ctx context.Context, pbf, saida string) error {
 		}
 	}
 
-	// 4. Banco: chave única evita repetir a mesma rua em cada trecho.
+	// 4. Banco: grava tudo sem índice e depois tira as repetições (a mesma
+	// rua em cada trecho) por ordenação. Índice único durante a gravação
+	// espalha escritas pelo arquivo e fica lento com pouca memória.
 	parcial := saida + ".gerando"
 	os.Remove(parcial)
 	db, err := abrirSQLite(parcial, false)
@@ -266,16 +268,15 @@ func GerarBusca(ctx context.Context, pbf, saida string) error {
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	for _, q := range []string{
-		`PRAGMA journal_mode=OFF`, `PRAGMA synchronous=OFF`, `PRAGMA cache_size=-65536`,
-		`CREATE TABLE lugares(id INTEGER PRIMARY KEY, nome TEXT, detalhe TEXT, tipo TEXT, lat REAL, lon REAL, peso REAL, chave TEXT)`,
-		`CREATE UNIQUE INDEX lugares_chave ON lugares(chave)`,
+		`PRAGMA journal_mode=OFF`, `PRAGMA synchronous=OFF`, `PRAGMA cache_size=-32768`, `PRAGMA temp_store=FILE`,
+		`CREATE TABLE bruto(nome TEXT, detalhe TEXT, tipo TEXT, lat REAL, lon REAL, peso REAL, chave TEXT)`,
 	} {
 		if _, err := db.Exec(q); err != nil {
 			return err
 		}
 	}
 	tx, _ := db.Begin()
-	ins, err := tx.Prepare(`INSERT OR IGNORE INTO lugares(nome, detalhe, tipo, lat, lon, peso, chave) VALUES(?,?,?,?,?,?,?)`)
+	ins, err := tx.Prepare(`INSERT INTO bruto VALUES(?,?,?,?,?,?,?)`)
 	if err != nil {
 		return err
 	}
@@ -299,7 +300,7 @@ func GerarBusca(ctx context.Context, pbf, saida string) error {
 				return err
 			}
 			tx, _ = db.Begin()
-			ins, _ = tx.Prepare(`INSERT OR IGNORE INTO lugares(nome, detalhe, tipo, lat, lon, peso, chave) VALUES(?,?,?,?,?,?,?)`)
+			ins, _ = tx.Prepare(`INSERT INTO bruto VALUES(?,?,?,?,?,?,?)`)
 			log.Printf("busca: %d registros", total)
 		}
 		return nil
@@ -341,10 +342,13 @@ func GerarBusca(ctx context.Context, pbf, saida string) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	log.Printf("busca: %d registros gravados; montando índice de texto", total)
+	log.Printf("busca: %d registros gravados; tirando repetições", total)
 	for _, q := range []string{
-		`DROP INDEX lugares_chave`,
-		`ALTER TABLE lugares DROP COLUMN chave`,
+		`CREATE TABLE lugares(id INTEGER PRIMARY KEY, nome TEXT, detalhe TEXT, tipo TEXT, lat REAL, lon REAL, peso REAL)`,
+		// Com max(), as outras colunas vêm da mesma linha do maior peso.
+		`INSERT INTO lugares(nome, detalhe, tipo, lat, lon, peso)
+		   SELECT nome, detalhe, tipo, lat, lon, max(peso) FROM bruto GROUP BY chave`,
+		`DROP TABLE bruto`,
 		`CREATE VIRTUAL TABLE lugares_fts USING fts5(nome, detalhe, content='lugares', content_rowid='id',
 		   tokenize='unicode61 remove_diacritics 2', prefix='2 3')`,
 		`INSERT INTO lugares_fts(lugares_fts) VALUES('rebuild')`,
@@ -360,7 +364,12 @@ func GerarBusca(ctx context.Context, pbf, saida string) error {
 		return err
 	}
 	st, _ := os.Stat(saida)
-	log.Printf("busca: pronto, %s com %d lugares (%s)", tamanhoLegivel(st.Size()), total, time.Since(inicio).Round(time.Second))
+	var unicos int
+	if db2, err := abrirSQLite(saida, true); err == nil {
+		_ = db2.QueryRow(`SELECT count(*) FROM lugares`).Scan(&unicos)
+		db2.Close()
+	}
+	log.Printf("busca: pronto, %s com %d lugares de %d registros (%s)", tamanhoLegivel(st.Size()), unicos, total, time.Since(inicio).Round(time.Second))
 	return nil
 }
 
