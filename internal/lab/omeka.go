@@ -50,9 +50,20 @@ func (c *Catalogo) ImportarOmeka(arquivoJSON, pastaArquivos string) (int, error)
 		if titulo == "" {
 			titulo = fmt.Sprintf("Item %d sem título", o.ID)
 		}
+		descricao := strings.Join(o.Campos["Description"], "\n\n")
+		for _, extra := range []struct{ campo, rotulo string }{
+			{"Publisher", "Editora"}, {"Source", "Fonte"}, {"Identifier", "Identificador"}, {"Format", "Formato"},
+		} {
+			if v := strings.Join(o.Campos[extra.campo], "; "); v != "" {
+				if descricao != "" {
+					descricao += "\n"
+				}
+				descricao += extra.rotulo + ": " + v
+			}
+		}
 		item := Item{Titulo: titulo, Autores: strings.Join(o.Campos["Creator"], "\n"),
 			Idioma: primeiro(o.Campos, "Language"), Assunto: strings.Join(o.Campos["Subject"], "; "),
-			Descricao: strings.Join(o.Campos["Description"], "\n\n"), Data: primeiro(o.Campos, "Date"),
+			Descricao: descricao, Data: primeiro(o.Campos, "Date"),
 			Tipo: primeiro(o.Campos, "Type"), Publico: o.Publico == 1, Tags: o.Tags, Origem: origem}
 		id, err := c.Gravar(&item)
 		if err != nil {
