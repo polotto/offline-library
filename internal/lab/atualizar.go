@@ -232,6 +232,11 @@ type meta4 struct {
 			Tipo  string `xml:"type,attr"`
 			Valor string `xml:",chardata"`
 		} `xml:"hash"`
+		Pedacos struct {
+			Tamanho int64    `xml:"length,attr"`
+			Tipo    string   `xml:"type,attr"`
+			Hashes  []string `xml:"hash"`
+		} `xml:"pieces"`
 	} `xml:"file"`
 }
 
@@ -240,8 +245,17 @@ type meta4 struct {
 func (a *Atualizador) baixarZim(ctx context.Context, categoria, nome string) error {
 	url := "https://download.kiwix.org/zim/" + categoria + "/" + nome
 	dl := a.cfg.Caminho("downloads")
-	if _, err := os.Stat(filepath.Join(dl, nome+".aria2")); err == nil {
-		return errors.New("outro programa está baixando esta edição; aguardando")
+	controle := filepath.Join(dl, nome+".aria2")
+	if st, err := os.Stat(controle); err == nil {
+		// O aria2 grava o controle a cada minuto. Parado há horas, o
+		// download foi abandonado e o arquivo parcial é adotado.
+		if time.Since(st.ModTime()) < 3*time.Hour {
+			return errors.New("outro programa está baixando esta edição; aguardando")
+		}
+		if err := os.Rename(filepath.Join(dl, nome), filepath.Join(dl, nome+".lab-parcial")); err == nil || errors.Is(err, os.ErrNotExist) {
+			_ = os.Remove(controle)
+			log.Printf("atualização: %s: download abandonado do aria2 adotado", nome)
+		}
 	}
 	b, err := a.get(ctx, url+".meta4", 4<<20)
 	if err != nil {
@@ -270,22 +284,29 @@ func (a *Atualizador) baixarZim(ctx context.Context, categoria, nome string) err
 	if livre, _, err := EspacoDisco(a.cfg.Dados); err == nil && int64(livre) < tamanho-feito+5*gib {
 		return fmt.Errorf("espaço insuficiente: faltam %s", tamanhoLegivel(tamanho-feito+5*gib-int64(livre)))
 	}
-	if feito < tamanho {
-		if err := a.baixarRetomando(ctx, url, parcial, nome, feito, tamanho); err != nil {
+	defer func() { a.mu.Lock(); delete(a.baixando, nome); a.mu.Unlock() }()
+	p := m.Arquivos[0].Pedacos
+	if p.Tipo == "sha-1" && p.Tamanho > 0 && int64(len(p.Hashes)) == (tamanho+p.Tamanho-1)/p.Tamanho {
+		if err := a.baixarPorPedacos(ctx, url, parcial, nome, tamanho, resumo, p.Tamanho, p.Hashes); err != nil {
 			return err
 		}
-	}
-	a.mu.Lock()
-	a.baixando[nome] = &andamento{texto: "Conferindo o resumo SHA-256 oficial."}
-	a.mu.Unlock()
-	defer func() { a.mu.Lock(); delete(a.baixando, nome); a.mu.Unlock() }()
-	soma, err := sha256Arquivo(parcial)
-	if err != nil {
-		return err
-	}
-	if soma != resumo {
-		_ = os.Rename(parcial, parcial+".rejeitado")
-		return errors.New("resumo SHA-256 diferente do oficial; arquivo rejeitado")
+	} else {
+		if feito < tamanho {
+			if err := a.baixarRetomando(ctx, url, parcial, nome, feito, tamanho); err != nil {
+				return err
+			}
+		}
+		a.mu.Lock()
+		a.baixando[nome] = &andamento{texto: "Conferindo o resumo SHA-256 oficial."}
+		a.mu.Unlock()
+		soma, err := sha256Arquivo(parcial)
+		if err != nil {
+			return err
+		}
+		if soma != resumo {
+			_ = os.Rename(parcial, parcial+".rejeitado")
+			return errors.New("resumo SHA-256 diferente do oficial; arquivo rejeitado")
+		}
 	}
 	destino := a.cfg.Caminho("kiwix", nome)
 	_ = os.MkdirAll(filepath.Dir(destino), 0o755)
