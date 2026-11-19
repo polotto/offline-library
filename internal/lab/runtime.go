@@ -102,7 +102,7 @@ func PlataformasRuntime() []string {
 // PrepararRuntime baixa, confere e extrai os programas de apoio das
 // plataformas pedidas. Precisa de internet só aqui.
 func PrepararRuntime(ctx context.Context, cfg *Config, plataformas []string) error {
-	cache := cfg.Caminho("downloads", "runtime")
+	cache := cfg.CacheRuntime()
 	if err := os.MkdirAll(cache, 0o755); err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func PrepararRuntime(ctx context.Context, cfg *Config, plataformas []string) err
 		if !ok {
 			return fmt.Errorf("plataforma desconhecida: %s", plat)
 		}
-		destino := cfg.Caminho("runtime", plat)
+		destino := cfg.PastaRuntime(plat)
 		novo := destino + ".novo"
 		_ = os.RemoveAll(novo)
 		for _, p := range pacotes {
@@ -337,7 +337,7 @@ func gravarConferencia(pasta string) error {
 // ConferirRuntime relê do disco cada arquivo dos programas de apoio da
 // plataforma e compara com a conferência gravada na extração.
 func ConferirRuntime(cfg *Config, plat string) error {
-	pasta := cfg.Caminho("runtime", plat)
+	pasta := cfg.PastaRuntime(plat)
 	b, err := os.ReadFile(filepath.Join(pasta, arquivoConferencia))
 	if err != nil {
 		return fmt.Errorf("sem conferência gravada")

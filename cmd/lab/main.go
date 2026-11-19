@@ -114,7 +114,7 @@ func main() {
 		}
 		out := *saida
 		if out == "" {
-			out = cfg.Caminho("mapas", "busca.db")
+			out = cfg.ArquivoBusca()
 		}
 		if err := lab.GerarBusca(ctx, *pbf, out); err != nil {
 			log.Fatal(err)

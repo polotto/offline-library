@@ -48,7 +48,7 @@ func (a *Atualizador) AtualizarBusca(ctx context.Context, forcar bool) error {
 // oficial, gera o índice na pasta de trabalho, copia para mapas/ e
 // confere a cópia. Só troca o índice em uso quando tudo passa.
 func (a *Atualizador) atualizarBusca(ctx context.Context, reg *registroAtualizacao) error {
-	destino := a.cfg.Caminho("mapas", "busca.db")
+	destino := a.cfg.ArquivoBusca()
 	_, semIndice := os.Stat(destino)
 	if semIndice == nil && time.Since(reg.UltimaConferencia["busca"]) < 30*24*time.Hour {
 		return nil
@@ -74,7 +74,7 @@ func (a *Atualizador) atualizarBusca(ctx context.Context, reg *registroAtualizac
 		return err
 	}
 	var atual estadoBusca
-	raw, _ := os.ReadFile(a.cfg.Caminho("mapas", "busca.json"))
+	raw, _ := os.ReadFile(strings.TrimSuffix(a.cfg.ArquivoBusca(), ".db") + ".json")
 	_ = json.Unmarshal(raw, &atual)
 	if semIndice == nil && atual.Versao == versao {
 		log.Printf("atualização: busca de endereços já está na versão %s", versao)
@@ -91,10 +91,7 @@ func (a *Atualizador) atualizarBusca(ctx context.Context, reg *registroAtualizac
 		return errors.New("resumo MD5 oficial do OpenStreetMap ausente")
 	}
 
-	trabalho := a.cfg.PastaTrabalho
-	if trabalho == "" {
-		trabalho = a.cfg.Caminho("downloads", "busca")
-	}
+	trabalho := a.cfg.Trabalho()
 	if err := os.MkdirAll(trabalho, 0o755); err != nil {
 		return err
 	}
@@ -157,7 +154,7 @@ func (a *Atualizador) atualizarBusca(ctx context.Context, reg *registroAtualizac
 		return err
 	}
 	j, _ := json.Marshal(estadoBusca{Versao: versao, Fonte: url, Data: time.Now()})
-	_ = os.WriteFile(a.cfg.Caminho("mapas", "busca.json"), j, 0o644)
+	_ = os.WriteFile(strings.TrimSuffix(a.cfg.ArquivoBusca(), ".db")+".json", j, 0o644)
 	_ = os.Remove(gerado)
 	_ = os.Remove(pbf)
 	a.marcarConferido(reg, "busca")
@@ -169,7 +166,7 @@ func (a *Atualizador) atualizarBusca(ctx context.Context, reg *registroAtualizac
 // atualizador não refazer o mesmo trabalho.
 func RegistrarBusca(cfg *Config, versao, fonte string) error {
 	j, _ := json.Marshal(estadoBusca{Versao: versao, Fonte: fonte, Data: time.Now()})
-	return os.WriteFile(cfg.Caminho("mapas", "busca.json"), j, 0o644)
+	return os.WriteFile(strings.TrimSuffix(cfg.ArquivoBusca(), ".db")+".json", j, 0o644)
 }
 
 func (a *Atualizador) marcarConferido(reg *registroAtualizacao, chave string) {

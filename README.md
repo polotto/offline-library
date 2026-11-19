@@ -91,7 +91,11 @@ lab atualizar-busca --dados /caminho/LabOffline
 Em `config/lab.json`, `osm` troca a região e `pasta_trabalho` põe os
 arquivos grandes e temporários (cerca de 2,5 vezes o `.osm.pbf`) em outro
 disco. Use uma pasta do disco interno quando o disco do acervo for USB
-instável. Geração à mão, sem internet:
+instável. Num servidor fixo cujo disco grava com defeito, `pasta_local`
+põe no disco interno os programas de apoio desta plataforma e o índice de
+busca; o acervo continua no disco. Os programas de apoio guardam o resumo
+SHA-256 de cada arquivo na extração, e a conferência diária relê do disco
+e refaz o que não bater. Geração à mão, sem internet:
 
 ```sh
 lab gerar-busca --dados /caminho/LabOffline --pbf arquivo.osm.pbf --versao-busca nome-datado

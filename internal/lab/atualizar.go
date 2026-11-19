@@ -491,7 +491,7 @@ func (a *Atualizador) reporRuntime(ctx context.Context) error {
 	if runtime.GOOS == "windows" {
 		exe = ".exe"
 	}
-	base := a.cfg.Caminho("runtime", Plataforma())
+	base := a.cfg.PastaRuntime(Plataforma())
 	motivo := ""
 	for _, p := range []string{"kiwix-serve" + exe, "pmtiles" + exe, filepath.Join("jre", "bin", "java"+exe)} {
 		if _, err := os.Stat(filepath.Join(base, p)); err != nil {

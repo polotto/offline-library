@@ -30,6 +30,10 @@ type Config struct {
 	PastaTrabalho string `json:"pasta_trabalho"`
 	// OSM é o arquivo .osm.pbf da região da busca de endereços.
 	OSM string `json:"osm"`
+	// PastaLocal, se definida, guarda no disco interno os programas de
+	// apoio desta plataforma e o índice de busca. Serve para servidor fixo
+	// cujo disco do acervo grava com defeito; o acervo continua no disco.
+	PastaLocal string `json:"pasta_local"`
 
 	Dados string `json:"-"`
 	Logs  string `json:"-"`
@@ -103,4 +107,39 @@ func Plataforma() string { return runtime.GOOS + "-" + runtime.GOARCH }
 
 func (c *Config) Caminho(partes ...string) string {
 	return filepath.Join(append([]string{c.Dados}, partes...)...)
+}
+
+// PastaRuntime é onde ficam os programas de apoio de uma plataforma.
+func (c *Config) PastaRuntime(plat string) string {
+	if c.PastaLocal != "" && plat == Plataforma() {
+		return filepath.Join(c.PastaLocal, "runtime", plat)
+	}
+	return c.Caminho("runtime", plat)
+}
+
+// CacheRuntime guarda os pacotes baixados dos programas de apoio.
+func (c *Config) CacheRuntime() string {
+	if c.PastaLocal != "" {
+		return filepath.Join(c.PastaLocal, "downloads", "runtime")
+	}
+	return c.Caminho("downloads", "runtime")
+}
+
+// ArquivoBusca é o índice de endereços em uso.
+func (c *Config) ArquivoBusca() string {
+	if c.PastaLocal != "" {
+		return filepath.Join(c.PastaLocal, "busca.db")
+	}
+	return c.Caminho("mapas", "busca.db")
+}
+
+// Trabalho é a pasta dos arquivos grandes e temporários da busca.
+func (c *Config) Trabalho() string {
+	switch {
+	case c.PastaTrabalho != "":
+		return c.PastaTrabalho
+	case c.PastaLocal != "":
+		return filepath.Join(c.PastaLocal, "trabalho")
+	}
+	return c.Caminho("downloads", "busca")
 }

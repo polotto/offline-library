@@ -197,7 +197,7 @@ func (c *Config) Programa(caminho ...string) (string, error) {
 	if runtime.GOOS == "windows" {
 		caminho[len(caminho)-1] = nome + ".exe"
 	}
-	local := c.Caminho(append([]string{"runtime", Plataforma()}, caminho...)...)
+	local := filepath.Join(append([]string{c.PastaRuntime(Plataforma())}, caminho...)...)
 	if st, err := os.Stat(local); err == nil && !st.IsDir() {
 		return local, nil
 	}

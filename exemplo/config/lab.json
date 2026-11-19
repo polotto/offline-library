@@ -9,5 +9,6 @@
   "memoria_rotas_mb": 192,
   "portas_antigas": {},
   "pasta_trabalho": "",
+  "pasta_local": "",
   "osm": "https://download.geofabrik.de/south-america-latest.osm.pbf"
 }

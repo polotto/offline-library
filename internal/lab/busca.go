@@ -23,7 +23,7 @@ type Busca struct {
 }
 
 func AbrirBusca(cfg *Config) *Busca {
-	return &Busca{caminho: cfg.Caminho("mapas", "busca.db")}
+	return &Busca{caminho: cfg.ArquivoBusca()}
 }
 
 func (b *Busca) abrir() *sql.DB {
