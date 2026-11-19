@@ -54,6 +54,13 @@ func (a *Atualizador) atualizarBusca(ctx context.Context, reg *registroAtualizac
 		return nil
 	}
 	defer func() { a.mu.Lock(); delete(a.baixando, "busca"); a.mu.Unlock() }()
+	if semIndice == nil {
+		a.andar("busca", "Conferindo a integridade do índice de endereços.")
+		if err := indiceIntegro(destino); err != nil {
+			log.Printf("atualização: índice de endereços corrompido (%v); será refeito", err)
+			semIndice = err
+		}
+	}
 
 	fonte := a.cfg.OSM
 	if fonte == "" {
@@ -134,6 +141,10 @@ func (a *Atualizador) atualizarBusca(ctx context.Context, reg *registroAtualizac
 	if err := copiarConferido(gerado, novo); err != nil {
 		_ = os.Remove(novo)
 		return err
+	}
+	if err := indiceIntegro(novo); err != nil {
+		_ = os.Remove(novo)
+		return fmt.Errorf("cópia do índice corrompida no disco: %w", err)
 	}
 	if a.antesDeTrocarBusca != nil {
 		a.antesDeTrocarBusca()
@@ -237,6 +248,7 @@ func copiarConferido(origem, destino string) error {
 	if err := d.Close(); err != nil {
 		return err
 	}
+	esquecerCache(destino)
 	a, err := sha256Arquivo(origem)
 	if err != nil {
 		return err
@@ -247,6 +259,24 @@ func copiarConferido(origem, destino string) error {
 	}
 	if a != b {
 		return errors.New("cópia do índice diferente da origem; disco instável")
+	}
+	return nil
+}
+
+// indiceIntegro roda a conferência rápida do SQLite no arquivo.
+func indiceIntegro(caminho string) error {
+	esquecerCache(caminho)
+	db, err := abrirSQLite(caminho, true)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	var r string
+	if err := db.QueryRow(`PRAGMA quick_check(1)`).Scan(&r); err != nil {
+		return err
+	}
+	if r != "ok" {
+		return errors.New(r)
 	}
 	return nil
 }

@@ -33,6 +33,8 @@ func (a *Atualizador) baixarPorPedacos(ctx context.Context, url, parcial, nome s
 		}
 	}
 	for rodada := 1; rodada <= 5; rodada++ {
+		_ = f.Sync()
+		esquecerCache(parcial)
 		ruins, soma, err := a.conferirPedacos(ctx, f, nome, total, tam, hashes)
 		if err != nil {
 			return err
