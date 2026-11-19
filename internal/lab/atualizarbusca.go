@@ -59,6 +59,9 @@ func (a *Atualizador) atualizarBusca(ctx context.Context, reg *registroAtualizac
 		if err := indiceIntegro(destino); err != nil {
 			log.Printf("atualização: índice de endereços corrompido (%v); será refeito", err)
 			semIndice = err
+			// Se a geração falhar agora, a próxima rodada tenta de novo.
+			delete(reg.UltimaConferencia, "busca")
+			a.gravarRegistro(*reg)
 		}
 	}
 
@@ -103,8 +106,9 @@ func (a *Atualizador) atualizarBusca(ctx context.Context, reg *registroAtualizac
 		if st, err := os.Stat(parcial); err == nil {
 			feito = st.Size()
 		}
-		// Arquivo, temporários da geração e o índice: cerca de 2,5 vezes o pbf.
-		if livre, _, err := EspacoDisco(trabalho); err == nil && int64(livre) < tamanho-feito+tamanho*3/2 {
+		// O que falta do arquivo, mais temporários e índice: medido em
+		// cerca de 0,8 vez o pbf; a margem pede uma vez.
+		if livre, _, err := EspacoDisco(trabalho); err == nil && int64(livre) < tamanho-feito+tamanho {
 			return fmt.Errorf("espaço insuficiente em %s para gerar a busca", trabalho)
 		}
 		if feito < tamanho {

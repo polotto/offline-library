@@ -149,6 +149,16 @@ func (a *Atualizador) Executar(ctx context.Context) {
 		falhas++
 		log.Printf("atualização: programas de apoio: %v", err)
 	}
+	// Busca e mapas antes das coleções: um download grande de enciclopédia
+	// pode levar dias e não deve segurar o resto.
+	if err := a.atualizarBusca(ctx, &reg); err != nil {
+		falhas++
+		log.Printf("atualização: busca de endereços: %v", err)
+	}
+	if err := a.atualizarMapas(ctx, &reg); err != nil {
+		falhas++
+		log.Printf("atualização: mapas: %v", err)
+	}
 	instalados := map[string]Zim{}
 	for _, z := range ZimsProntos(a.cfg) {
 		instalados[z.Prefixo] = z
@@ -184,14 +194,6 @@ func (a *Atualizador) Executar(ctx context.Context) {
 			_ = os.Remove(atual.Caminho)
 			_ = os.Remove(atual.Caminho + ".ok")
 		}
-	}
-	if err := a.atualizarMapas(ctx, &reg); err != nil {
-		falhas++
-		log.Printf("atualização: mapas: %v", err)
-	}
-	if err := a.atualizarBusca(ctx, &reg); err != nil {
-		falhas++
-		log.Printf("atualização: busca de endereços: %v", err)
 	}
 	estado, texto := "pronto", "Acervo conferido."
 	if novas > 0 {
@@ -482,27 +484,37 @@ func ultimasLinhas(s string, n int) string {
 	return strings.Join(l, " | ")
 }
 
-// reporRuntime baixa de novo os programas de apoio desta plataforma quando
-// algum falta no disco, e reinicia o que depende deles.
+// reporRuntime refaz os programas de apoio desta plataforma quando algum
+// falta ou não confere com o resumo gravado, e reinicia o que depende deles.
 func (a *Atualizador) reporRuntime(ctx context.Context) error {
 	exe := ""
 	if runtime.GOOS == "windows" {
 		exe = ".exe"
 	}
 	base := a.cfg.Caminho("runtime", Plataforma())
+	motivo := ""
 	for _, p := range []string{"kiwix-serve" + exe, "pmtiles" + exe, filepath.Join("jre", "bin", "java"+exe)} {
 		if _, err := os.Stat(filepath.Join(base, p)); err != nil {
-			a.andar("runtime", "Baixando programas de apoio para "+Plataforma()+".")
-			defer func() { a.mu.Lock(); delete(a.baixando, "runtime"); a.mu.Unlock() }()
-			if err := PrepararRuntime(ctx, a.cfg, []string{Plataforma()}); err != nil {
-				return err
-			}
-			a.kiwix.Reiniciar()
-			if a.rotas != nil {
-				a.rotas.Reiniciar()
-			}
-			return nil
+			motivo = p + " ausente"
 		}
+	}
+	if motivo == "" {
+		if err := ConferirRuntime(a.cfg, Plataforma()); err != nil {
+			motivo = err.Error()
+		}
+	}
+	if motivo == "" {
+		return nil
+	}
+	log.Printf("atualização: programas de apoio de %s: %s; refazendo", Plataforma(), motivo)
+	a.andar("runtime", "Refazendo programas de apoio para "+Plataforma()+".")
+	defer func() { a.mu.Lock(); delete(a.baixando, "runtime"); a.mu.Unlock() }()
+	if err := PrepararRuntime(ctx, a.cfg, []string{Plataforma()}); err != nil {
+		return err
+	}
+	a.kiwix.Reiniciar()
+	if a.rotas != nil {
+		a.rotas.Reiniciar()
 	}
 	return nil
 }

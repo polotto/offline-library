@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -122,11 +123,17 @@ func PrepararRuntime(ctx context.Context, cfg *Config, plataformas []string) err
 				return fmt.Errorf("%s: extrair %s: %w", plat, path.Base(arquivo), err)
 			}
 		}
+		if err := gravarConferencia(novo); err != nil {
+			return fmt.Errorf("%s: conferência: %w", plat, err)
+		}
 		_ = os.RemoveAll(destino)
 		if err := os.Rename(novo, destino); err != nil {
 			return err
 		}
-		log.Printf("runtime: %s pronto", plat)
+		if err := ConferirRuntime(cfg, plat); err != nil {
+			return fmt.Errorf("%s: gravado com defeito no disco: %w", plat, err)
+		}
+		log.Printf("runtime: %s pronto e conferido", plat)
 	}
 	return nil
 }
@@ -294,6 +301,60 @@ func extrair(arquivo, destino string, escolher func(string) string) error {
 			if err := gravar(link, os.FileMode(h.Mode).Perm(), strings.NewReader(string(dados))); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+const arquivoConferencia = ".conferencia.json"
+
+// gravarConferencia guarda o SHA-256 de cada arquivo extraído, para
+// conferir depois se o disco devolve os mesmos bytes.
+func gravarConferencia(pasta string) error {
+	resumos := map[string]string{}
+	err := filepath.WalkDir(pasta, func(c string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		rel, _ := filepath.Rel(pasta, c)
+		if rel == arquivoConferencia {
+			return nil
+		}
+		s, err := sha256Arquivo(c)
+		if err != nil {
+			return err
+		}
+		resumos[filepath.ToSlash(rel)] = s
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(resumos, "", " ")
+	return os.WriteFile(filepath.Join(pasta, arquivoConferencia), b, 0o644)
+}
+
+// ConferirRuntime relê do disco cada arquivo dos programas de apoio da
+// plataforma e compara com a conferência gravada na extração.
+func ConferirRuntime(cfg *Config, plat string) error {
+	pasta := cfg.Caminho("runtime", plat)
+	b, err := os.ReadFile(filepath.Join(pasta, arquivoConferencia))
+	if err != nil {
+		return fmt.Errorf("sem conferência gravada")
+	}
+	var resumos map[string]string
+	if err := json.Unmarshal(b, &resumos); err != nil {
+		return err
+	}
+	for rel, esperado := range resumos {
+		c := filepath.Join(pasta, filepath.FromSlash(rel))
+		esquecerCache(c)
+		s, err := sha256Arquivo(c)
+		if err != nil {
+			return fmt.Errorf("%s: %w", rel, err)
+		}
+		if s != esperado {
+			return fmt.Errorf("%s com bytes diferentes", rel)
 		}
 	}
 	return nil
