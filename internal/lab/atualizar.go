@@ -478,13 +478,21 @@ func (a *Atualizador) atualizarMapas(ctx context.Context, reg *registroAtualizac
 		return fmt.Errorf("mapa novo recortado com defeito: %v", err)
 	}
 	if gerado != novo {
-		a.andar("mapas", "Copiando e conferindo o mapa "+melhor+".")
-		if err := copiarConferido(gerado, novo); err != nil {
+		// A falha do disco é intermitente: repetir a cópia sai mais barato
+		// que recortar de novo.
+		var err error
+		for tentativa := 1; tentativa <= 3 && ctx.Err() == nil; tentativa++ {
+			a.andar("mapas", fmt.Sprintf("Copiando e conferindo o mapa %s (tentativa %d de 3).", melhor, tentativa))
+			if err = copiarConferido(gerado, novo); err == nil {
+				err = verificarPmtiles(ctx, pmtiles, novo)
+			}
+			if err == nil {
+				break
+			}
 			_ = os.Remove(novo)
-			return err
+			log.Printf("atualização: mapas: tentativa %d: %v", tentativa, err)
 		}
-		if err := verificarPmtiles(ctx, pmtiles, novo); err != nil {
-			_ = os.Remove(novo)
+		if err != nil {
 			return fmt.Errorf("cópia do mapa com defeito: %v", err)
 		}
 	}
