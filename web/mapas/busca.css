@@ -23,10 +23,14 @@
 #busca-lista button:hover{background:#e2efe5}
 #busca-lista button:focus-visible{outline:3px solid #cb8621;outline-offset:-3px}
 .busca-ir{flex:1;text-align:left;padding:7px 8px!important;min-width:0;min-height:44px}
-.busca-nome{display:block;font-size:15px;font-weight:500;overflow-wrap:anywhere}
+.busca-nome{display:block;font-size:15px;font-weight:400;overflow-wrap:anywhere}
 .busca-nome mark{background:none;color:inherit;font-weight:700}
 .busca-ir small{display:block;color:#526057;font-size:12.5px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.busca-ab{flex:none;width:40px;font-weight:700!important;color:#173c36!important;font-size:14px!important}
+.busca-ab{flex:none;width:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;color:#173c36!important}
+.busca-ab b{font-size:15px;line-height:1}
+.busca-ab small{font-size:10.5px;line-height:1.1;color:#526057}
+/* Lista anterior enquanto a nova não chega. */
+#busca-lista li.busca-velha{opacity:.55}
 .busca-info{padding:9px 14px;font-size:14px;color:#526057;line-height:1.35}
 .busca-titulo{padding:6px 14px 2px;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
 .busca-parcial{font-size:12.5px;border-top:1px solid #e4e8df;margin-top:2px}
@@ -40,5 +44,5 @@
 @media(max-width:600px){
   #busca{flex-basis:100%;max-width:none;order:5}
   #busca-lista{max-height:55dvh}
-  .busca-ab{width:44px}
+  .busca-ab{width:50px}
 }

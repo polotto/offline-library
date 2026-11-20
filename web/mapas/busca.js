@@ -2,8 +2,10 @@
  *
  * Comportamento de caixa de busca de mapa:
  * - o campo funciona desde o início, mesmo antes do mapa abrir;
- * - sugestões enquanto digita, com barra fina de carregamento;
- * - respostas antigas nunca sobrescrevem as novas;
+ * - a lista acompanha a digitação: no máximo um pedido em andamento, sem
+ *   cancelar por tecla nova; quando ele volta, a lista muda e o pedido do
+ *   texto mais novo sai na hora;
+ * - enquanto espera, a última lista fica na tela, filtrada pelo texto atual;
  * - X apaga o texto e o marcador e devolve o foco;
  * - tocar no campo depois de escolher seleciona o texto e reabre a lista;
  * - teclado: setas, Enter, Esc e Tab.
@@ -15,6 +17,7 @@ const buscaUtil = (() => {
     if (tipo === 'Bairro' || tipo === 'Povoado' || tipo === 'Localidade') return 14.5;
     if (tipo === 'Rodovia') return 13;
     if (tipo === 'Rua' || tipo === 'Avenida ou rua principal') return 16;
+    if (tipo === 'Endereço') return 18;
     return 17;
   }
 
@@ -22,11 +25,12 @@ const buscaUtil = (() => {
   function normal(s) {
     return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   }
+  const termosDe = q => normal(q).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 
   // Divide o texto em trechos [texto, destacado]. Destaca o começo de cada
   // palavra que bate com um termo digitado, sem ligar para acento.
   function trechos(texto, consulta) {
-    const termos = normal(consulta).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    const termos = termosDe(consulta);
     if (!termos.length || !texto) return [[texto, false]];
     const letras = [...texto];
     const base = letras.map(normal);
@@ -51,11 +55,15 @@ const buscaUtil = (() => {
     return saida;
   }
 
-  // Só vale a resposta do pedido mais novo.
-  function sequenciador() {
-    let ultimo = 0;
-    return {novo: () => ++ultimo, vale: n => n === ultimo};
+  // O lugar ainda serve para o texto atual? Cada termo precisa ser começo
+  // de alguma palavra do nome ou do detalhe.
+  function casa(l, consulta) {
+    const palavras = termosDe(l.nome + ' ' + (l.detalhe || ''));
+    return termosDe(consulta).every(t => palavras.some(p => p.startsWith(t)));
   }
+
+  // O texto novo continua o texto velho? Então a resposta velha ainda ajuda.
+  const continua = (novo, velho) => normal(novo).startsWith(normal(velho));
 
   // Cache pequeno: o menos usado sai primeiro.
   function cache(limite) {
@@ -63,10 +71,11 @@ const buscaUtil = (() => {
     return {
       get(k) { if (!m.has(k)) return undefined; const v = m.get(k); m.delete(k); m.set(k, v); return v; },
       set(k, v) { m.delete(k); m.set(k, v); if (m.size > limite) m.delete(m.keys().next().value); },
+      delete(k) { m.delete(k); },
     };
   }
 
-  return {zoomDe, normal, trechos, sequenciador, cache};
+  return {zoomDe, normal, trechos, casa, continua, cache};
 })();
 
 const instalarBusca = (() => {
@@ -75,17 +84,17 @@ const instalarBusca = (() => {
   const lista = document.getElementById('busca-lista');
   const limpar = document.getElementById('busca-limpar');
   const aviso = document.getElementById('busca-aviso');
-  const DEBOUNCE = 150, DEMORA = 2500, LIMITE = 20000, MINIMO = 2;
-  const seq = buscaUtil.sequenciador();
-  const guardados = buscaUtil.cache(60);
+  const DEMORA = 2500, LIMITE = 20000, MINIMO = 2, VALIDADE_PARCIAL = 60000;
+  const guardados = buscaUtil.cache(80);
   let map = null, rotas = null, pendente = null, marcador = null;
-  let pedido = null, espera = null;
-  // achados vieram da consulta "digitado". textoBase é o que a pessoa
-  // digitou, para voltar a ele quando as setas passam do fim da lista.
-  let achados = [], digitado = '', parcial = false, textoBase = '', ativo = -1;
-  let escolhido = null, enterPendente = false;
-  let estado = 'pronto'; // pronto, carregando, erro, sem-indice
-  let mensagem = '';
+  // base: última resposta mostrada {q, lugares, parcial, n}.
+  // voo: o único pedido em andamento {q, n, controle, inicio}.
+  // textoBase: o que a pessoa digitou, para voltar a ele com as setas.
+  let base = {q: '', lugares: [], parcial: false, n: 0};
+  let voo = null, numero = 0;
+  let achados = [], textoBase = '', ativo = -1;
+  let escolhido = null, enterPendente = false, listaDaEscolha = false;
+  let falha = null; // {q, tipo: 'erro' | 'sem-indice', mensagem}
   let recentes = [];
   try { recentes = JSON.parse(localStorage.getItem('busca-recentes') || '[]').slice(0, 5); } catch (_) {}
 
@@ -97,19 +106,27 @@ const instalarBusca = (() => {
     if (r.status === 503) campo.placeholder = 'Busca de endereços ainda não instalada';
   }).catch(() => {});
 
-  const anunciar = t => { aviso.textContent = t; };
-  const carregando = sim => { form.dataset.carregando = String(sim); };
+  const anunciar = t => { if (aviso.textContent !== t) aviso.textContent = t; };
   const atualizarLimpar = () => { limpar.hidden = campo.value === ''; };
   const aberta = () => !lista.hidden;
   const consulta = () => textoBase.trim();
   const modoRecentes = () => consulta().length < MINIMO;
-  const itensAtuais = () => modoRecentes() ? recentes : achados;
+  const focado = () => form.contains(document.activeElement);
+  const atualizarCarregando = () => { form.dataset.carregando = String(!!voo); };
 
   function fechar() {
     lista.hidden = true;
     ativo = -1;
     campo.setAttribute('aria-expanded', 'false');
     campo.removeAttribute('aria-activedescendant');
+  }
+
+  function tirarMarcador() {
+    marcador?.remove();
+    marcador = null;
+    pendente = null;
+    escolhido = null;
+    listaDaEscolha = false;
   }
 
   function ir(l, comoRota) {
@@ -124,8 +141,10 @@ const instalarBusca = (() => {
       map.flyTo({center: ponto, zoom: buscaUtil.zoomDe(l.tipo), speed: 1.6});
       if (comoRota !== undefined && rotas) rotas.definir(comoRota, {lng: l.lon, lat: l.lat});
     }
+    abortar();
     escolhido = {...l};
     enterPendente = false;
+    listaDaEscolha = false;
     campo.value = l.nome;
     textoBase = l.nome;
     atualizarLimpar();
@@ -161,21 +180,45 @@ const instalarBusca = (() => {
     return li;
   }
 
-  function botao(texto, titulo, classe, acao) {
+  function botao(conteudo, titulo, classe, acao) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = classe;
-    if (typeof texto === 'string') b.textContent = texto; else b.append(...texto);
+    b.append(...conteudo);
     if (titulo) { b.title = titulo; b.setAttribute('aria-label', titulo); }
     b.onclick = acao;
     return b;
   }
 
-  // Desenha a lista com o estado atual. Os resultados anteriores ficam
-  // na tela enquanto a nova resposta não chega, para não piscar.
+  function rotulo(letra, texto) {
+    const l = document.createElement('b');
+    l.textContent = letra;
+    const t = document.createElement('small');
+    t.textContent = texto;
+    return [l, t];
+  }
+
+  // Quais lugares mostrar agora. Se a última resposta é de um texto mais
+  // curto, filtra no navegador o que ainda casa. Se nada casa e há pedido
+  // em andamento, mantém a lista velha esmaecida até a nova chegar.
+  function lugaresAgora() {
+    const q = consulta();
+    if (listaDaEscolha) return {itens: base.lugares, velha: false};
+    if (modoRecentes()) return {itens: recentes, velha: false};
+    if (base.q === q) return {itens: base.lugares, velha: false};
+    if (!base.q) return {itens: [], velha: false};
+    const filtrados = base.lugares.filter(l => buscaUtil.casa(l, q));
+    if (filtrados.length || !voo) return {itens: filtrados, velha: false};
+    return {itens: base.lugares, velha: true};
+  }
+
+  // Desenha a lista com o estado atual, sem esconder durante a espera.
   function desenhar() {
-    const recente = modoRecentes();
-    const fonte = itensAtuais();
+    const q = listaDaEscolha ? base.q : consulta();
+    const recente = !listaDaEscolha && modoRecentes();
+    const {itens: fonte, velha} = lugaresAgora();
+    achados = fonte;
+    if (ativo >= fonte.length) ativo = -1;
     const itens = [];
     if (recente && fonte.length) itens.push(linhaInfo('busca-titulo', 'Recentes'));
     fonte.forEach((l, i) => {
@@ -183,28 +226,30 @@ const instalarBusca = (() => {
       li.setAttribute('role', 'option');
       li.id = 'busca-op-' + i;
       li.setAttribute('aria-selected', String(i === ativo));
+      if (velha) li.className = 'busca-velha';
       if (escolhido && l.nome === escolhido.nome && l.lat === escolhido.lat && l.lon === escolhido.lon) li.dataset.escolhido = 'true';
       const nome = document.createElement('span');
       nome.className = 'busca-nome';
-      nome.append(...textoDestacado(l.nome, recente ? '' : digitado));
+      nome.append(...textoDestacado(l.nome, recente ? '' : q));
       const det = document.createElement('small');
       det.textContent = l.detalhe || l.tipo || '';
       li.append(
         botao([nome, det], '', 'busca-ir', () => ir(l)),
-        botao('A', 'Usar ' + l.nome + ' como origem A', 'busca-ab', () => ir(l, 0)),
-        botao('B', 'Usar ' + l.nome + ' como destino B', 'busca-ab', () => ir(l, 1)));
+        botao(rotulo('A', 'Origem'), 'Usar ' + l.nome + ' como origem A', 'busca-ab', () => ir(l, 0)),
+        botao(rotulo('B', 'Destino'), 'Usar ' + l.nome + ' como destino B', 'busca-ab', () => ir(l, 1)));
       itens.push(li);
     });
     if (!recente) {
-      if (estado === 'erro') {
-        itens.push(linhaInfo('busca-erro', mensagem, botao('Tentar de novo', '', 'busca-tentar', () => { campo.focus(); procurar(true); })));
-      } else if (estado === 'sem-indice') {
-        itens.push(linhaInfo('busca-erro', mensagem));
-      } else if (estado === 'carregando' && mensagem) {
-        itens.push(linhaInfo('busca-demora', mensagem));
-      } else if (estado === 'pronto' && !achados.length && consulta() === digitado) {
-        itens.push(linhaInfo('busca-vazio', 'Nada encontrado para "' + digitado + '". Tente o nome da rua com a cidade.'));
-      } else if (estado === 'pronto' && parcial && achados.length) {
+      if (falha && falha.q === q) {
+        const tentar = falha.tipo === 'erro'
+          ? botao(['Tentar de novo'], '', 'busca-tentar', () => { campo.focus(); falha = null; pedir(q); desenhar(); })
+          : null;
+        itens.push(linhaInfo('busca-erro', falha.mensagem, tentar));
+      } else if (voo && performance.now() - voo.inicio > DEMORA) {
+        itens.push(linhaInfo('busca-demora', 'Ainda buscando. O servidor está lento, aguarde.'));
+      } else if (!voo && base.q === q && !fonte.length && !base.parcial) {
+        itens.push(linhaInfo('busca-vazio', 'Nada encontrado para "' + q + '". Tente o nome da rua com a cidade.'));
+      } else if (base.q === q && base.parcial && fonte.length) {
         itens.push(linhaInfo('busca-parcial', 'Resultados resumidos para responder rápido. Digite mais para refinar.'));
       }
     }
@@ -219,56 +264,70 @@ const instalarBusca = (() => {
   }
 
   function chaveDe(q) {
-    if (!map) return q;
+    const n = buscaUtil.normal(q);
+    if (!map) return n;
     const c = map.getCenter();
-    return q + '@' + c.lat.toFixed(1) + ',' + c.lng.toFixed(1);
+    return n + '@' + c.lat.toFixed(1) + ',' + c.lng.toFixed(1);
   }
 
-  function aplicar(q, d) {
-    achados = d.lugares || [];
-    parcial = !!d.parcial;
-    estado = 'pronto';
-    mensagem = '';
-    digitado = q;
-    ativo = -1;
-    carregando(false);
-    anunciar(achados.length ? achados.length + (achados.length === 1 ? ' resultado.' : ' resultados.') : 'Nada encontrado.');
-    if (enterPendente) {
-      enterPendente = false;
-      if (achados.length) { ir(achados[0]); return; }
+  function lerCache(q) {
+    const v = guardados.get(chaveDe(q));
+    if (!v) return undefined;
+    if (v.d.parcial && Date.now() - v.t > VALIDADE_PARCIAL) { guardados.delete(chaveDe(q)); return undefined; }
+    return v.d;
+  }
+
+  // Mostra a resposta de q, se ela não é mais velha que a já mostrada e se
+  // o texto atual ainda continua q.
+  function aplicar(q, d, n) {
+    if (n < base.n) return;
+    if (!buscaUtil.continua(consulta(), q)) return;
+    // Resposta resumida e vazia de prefixo curto não apaga a lista que serve.
+    const lugares = d.lugares || [];
+    if (d.parcial && !lugares.length && base.lugares.some(l => buscaUtil.casa(l, consulta()))) return;
+    base = {q, lugares: d.lugares || [], parcial: !!d.parcial, n};
+    if (falha && falha.q === q) falha = null;
+    if (q === consulta()) {
+      const total = base.lugares.length;
+      anunciar(total ? total + (total === 1 ? ' resultado.' : ' resultados.') : 'Nada encontrado.');
+      if (enterPendente) {
+        enterPendente = false;
+        if (total) { ir(base.lugares[0]); return; }
+      }
     }
-    if (form.contains(document.activeElement)) desenhar();
+    // Quem está andando com as setas não vê a lista mudar debaixo do dedo.
+    if (focado() && ativo < 0) desenhar();
   }
 
-  function cancelar() {
-    clearTimeout(espera);
-    pedido?.abort();
-    pedido = null;
-    return seq.novo();
+  function abortar() {
+    if (!voo) return;
+    voo.controle.abort();
+    voo = null;
+    atualizarCarregando();
   }
 
-  async function procurar(forcar) {
-    const n = cancelar();
+  // Decide o próximo pedido. Nunca cancela um pedido que o texto atual
+  // ainda continua: espera ele voltar e então pede o texto mais novo.
+  function agendar() {
     const q = consulta();
-    if (q.length < MINIMO) {
-      carregando(false);
-      estado = 'pronto'; mensagem = '';
-      desenhar();
-      return;
+    if (q.length < MINIMO) { abortar(); enterPendente = false; return; }
+    const salvo = lerCache(q);
+    if (salvo) { aplicar(q, salvo, ++numero); return; }
+    if (voo) {
+      if (voo.q === q || buscaUtil.continua(q, voo.q)) return;
+      abortar(); // apagou letras: a resposta em andamento não serve mais
     }
-    const chave = chaveDe(q);
-    const salvo = forcar ? undefined : guardados.get(chave);
-    if (salvo) { aplicar(q, salvo); return; }
+    pedir(q);
+  }
+
+  async function pedir(q) {
+    abortar();
+    const n = ++numero;
     const controle = new AbortController();
-    pedido = controle;
-    estado = 'carregando'; mensagem = '';
-    carregando(true);
-    const demora = setTimeout(() => {
-      if (!seq.vale(n)) return;
-      mensagem = 'Ainda buscando. O servidor está lento, aguarde.';
-      anunciar('Ainda buscando.');
-      if (form.contains(document.activeElement)) desenhar();
-    }, DEMORA);
+    const meu = {q, n, controle, inicio: performance.now()};
+    voo = meu;
+    atualizarCarregando();
+    const demora = setTimeout(() => { if (voo === meu && focado()) { anunciar('Ainda buscando.'); desenhar(); } }, DEMORA + 50);
     let porTempo = false;
     const corte = setTimeout(() => { porTempo = true; controle.abort(); }, LIMITE);
     const params = {q};
@@ -276,36 +335,36 @@ const instalarBusca = (() => {
       const c = map.getCenter();
       params.lat = c.lat.toFixed(4); params.lon = c.lng.toFixed(4);
     }
+    let resposta = null;
     try {
       const r = await fetch('./busca?' + new URLSearchParams(params), {signal: controle.signal, cache: 'no-store'});
       if (r.status === 503) throw Object.assign(new Error('sem índice'), {semIndice: true});
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      const d = await r.json();
-      if (!d.parcial) guardados.set(chave, d);
-      if (seq.vale(n)) aplicar(q, d);
+      resposta = await r.json();
+      guardados.set(chaveDe(q), {d: resposta, t: Date.now()});
     } catch (e) {
-      if (!seq.vale(n)) return; // trocado por pedido mais novo ou apagado
-      carregando(false);
-      enterPendente = false;
-      achados = []; digitado = q;
-      if (e.semIndice) {
-        estado = 'sem-indice';
-        mensagem = 'A busca de endereços ainda não foi instalada neste servidor. O mapa funciona normalmente.';
-      } else {
-        estado = 'erro';
-        mensagem = porTempo ? 'O servidor não respondeu a tempo.' : 'Não foi possível falar com o servidor do mapa.';
+      if (controle.signal.aborted && !porTempo) return; // abandonado de propósito
+      if (voo === meu && q === consulta()) {
+        enterPendente = false;
+        falha = e.semIndice
+          ? {q, tipo: 'sem-indice', mensagem: 'A busca de endereços ainda não foi instalada neste servidor. O mapa funciona normalmente.'}
+          : {q, tipo: 'erro', mensagem: porTempo ? 'O servidor não respondeu a tempo.' : 'Não foi possível falar com o servidor do mapa.'};
+        anunciar(falha.mensagem);
       }
-      anunciar(mensagem);
-      if (form.contains(document.activeElement)) desenhar();
     } finally {
       clearTimeout(corte);
       clearTimeout(demora);
-      if (pedido === controle) pedido = null;
     }
+    if (voo !== meu) return;
+    voo = null;
+    atualizarCarregando();
+    if (resposta) aplicar(q, resposta, n);
+    if (consulta() !== q && !falha) agendar(); // texto mudou enquanto esperava
+    if (focado() && ativo < 0) desenhar();
   }
 
   function mover(passo) {
-    const itens = itensAtuais();
+    const itens = achados;
     if (!itens.length) return;
     // Passar do fim volta ao texto digitado, como no Google Maps.
     let novo = ativo + passo;
@@ -318,15 +377,13 @@ const instalarBusca = (() => {
   }
 
   function apagar() {
-    cancelar();
-    carregando(false);
+    abortar();
     campo.value = '';
     textoBase = '';
-    escolhido = null;
-    achados = []; parcial = false; estado = 'pronto'; digitado = ''; enterPendente = false; mensagem = '';
-    marcador?.remove();
-    marcador = null;
-    pendente = null;
+    base = {q: '', lugares: [], parcial: false, n: base.n};
+    enterPendente = false;
+    falha = null;
+    tirarMarcador();
     atualizarLimpar();
     campo.focus();
     desenhar();
@@ -335,27 +392,22 @@ const instalarBusca = (() => {
 
   campo.addEventListener('input', () => {
     textoBase = campo.value;
-    escolhido = null;
+    listaDaEscolha = false;
     ativo = -1;
+    escolhido = null;
+    // Apagar tudo com Backspace limpa como o X.
+    if (campo.value === '') tirarMarcador();
+    if (falha && falha.q !== consulta()) falha = null;
     atualizarLimpar();
-    const q = consulta();
-    if (q.length < MINIMO || guardados.get(chaveDe(q))) { procurar(); return; }
-    cancelar();
-    estado = 'carregando'; mensagem = '';
-    carregando(true);
+    agendar();
     desenhar();
-    espera = setTimeout(procurar, DEBOUNCE);
   });
 
   campo.addEventListener('keydown', e => {
     if (e.isComposing) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      if (!aberta()) {
-        if (!modoRecentes() && digitado !== consulta()) procurar();
-        else desenhar();
-        return;
-      }
+      if (!aberta()) { agendar(); desenhar(); return; }
       mover(e.key === 'ArrowDown' ? 1 : -1);
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -366,20 +418,18 @@ const instalarBusca = (() => {
       else campo.blur();
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const itens = itensAtuais();
-      if (aberta() && ativo >= 0 && itens[ativo]) { ir(itens[ativo]); return; }
+      if (aberta() && ativo >= 0 && achados[ativo]) { ir(achados[ativo]); return; }
       const q = consulta();
       if (q.length < MINIMO) return;
-      if (estado === 'pronto' && digitado === q) {
-        if (achados.length) ir(achados[0]);
+      if (base.q === q && !voo) {
+        if (base.lugares.length) ir(base.lugares[0]);
         else desenhar();
         return;
       }
-      if (estado === 'carregando') {
-        // Escolhe o primeiro assim que a resposta chegar.
-        enterPendente = true;
-        if (!pedido) procurar();
-      } else { enterPendente = true; procurar(true); }
+      // Escolhe o primeiro assim que a resposta do texto atual chegar.
+      enterPendente = true;
+      if (falha && falha.q === q) { falha = null; pedir(q); }
+      else agendar();
     }
   });
 
@@ -392,27 +442,32 @@ const instalarBusca = (() => {
     e.preventDefault();
     const linhas = [...lista.querySelectorAll('li[role=option]')];
     const li = atual.closest('li');
-    const col = [...li.querySelectorAll('button')].indexOf(atual);
+    const col = [...li.querySelectorAll(':scope > button')].indexOf(atual);
     const alvo = linhas[linhas.indexOf(li) + (e.key === 'ArrowDown' ? 1 : -1)];
-    if (alvo) alvo.querySelectorAll('button')[col]?.focus();
+    if (alvo) alvo.querySelectorAll(':scope > button')[col]?.focus();
     else if (e.key === 'ArrowUp') campo.focus();
   });
 
-  // Tocar no campo depois de escolher seleciona tudo e reabre a lista.
   // O primeiro clique depois de escolher seleciona tudo, com ou sem foco.
   // O clique roda depois do mouseup, então o navegador não desfaz a seleção.
   const selecionarTudo = () => campo.setSelectionRange(0, campo.value.length);
   campo.addEventListener('click', () => {
     if (escolhido && !escolhido.selecionado) { escolhido.selecionado = true; selecionarTudo(); }
-    if (!aberta()) desenhar();
+    if (!aberta()) reabrir();
   });
+  // Depois de escolher, a lista de onde veio a escolha reaparece.
+  function reabrir() {
+    if (escolhido && base.lugares.length && consulta() === escolhido.nome) {
+      listaDaEscolha = true;
+      desenhar();
+      return;
+    }
+    agendar();
+    desenhar();
+  }
   campo.addEventListener('focus', () => {
     if (escolhido) selecionarTudo(); // foco pelo teclado
-    if (aberta()) return;
-    if (modoRecentes() || estado === 'carregando') { desenhar(); return; }
-    if (escolhido && achados.length) { desenhar(); return; }
-    if (digitado === consulta() && estado !== 'erro') { desenhar(); return; }
-    procurar();
+    if (!aberta()) reabrir();
   });
 
   limpar.addEventListener('click', apagar);
