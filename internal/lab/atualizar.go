@@ -449,25 +449,50 @@ func (a *Atualizador) atualizarMapas(ctx context.Context, reg *registroAtualizac
 	if livre, _, err := EspacoDisco(a.cfg.Dados); err == nil && int64(livre) < 15*gib {
 		return errors.New("espaço insuficiente para o mapa novo")
 	}
+	// O recorte é feito na pasta de trabalho (disco interno quando há
+	// pasta_local) e só depois copiado e relido no disco do acervo: o disco
+	// USB já corrompeu gravações sem dar erro.
+	trabalho := a.cfg.Trabalho()
+	if err := os.MkdirAll(trabalho, 0o755); err != nil {
+		return err
+	}
+	if livre, _, err := EspacoDisco(trabalho); err == nil && int64(livre) < 6*gib {
+		return errors.New("espaço insuficiente na pasta de trabalho para o mapa novo")
+	}
+	gerado := filepath.Join(trabalho, "america-sul.pmtiles.recorte")
 	novo := a.cfg.Caminho("mapas", "america-sul.pmtiles.novo")
-	a.mu.Lock()
-	a.baixando["mapas"] = &andamento{texto: "Recortando mapa " + melhor + "."}
-	a.mu.Unlock()
+	_ = os.Remove(novo)
+	a.andar("mapas", "Recortando mapa "+melhor+".")
 	defer func() { a.mu.Lock(); delete(a.baixando, "mapas"); a.mu.Unlock() }()
-	cmd := exec.CommandContext(ctx, pmtiles, "extract", "https://build.protomaps.com/"+melhor, novo,
+	defer os.Remove(gerado)
+	cmd := exec.CommandContext(ctx, pmtiles, "extract", "https://build.protomaps.com/"+melhor, gerado,
 		"--bbox=-82,-56,-34,13", "--maxzoom=14")
 	esconderJanela(cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		_ = os.Remove(novo)
 		return fmt.Errorf("pmtiles extract: %v: %s", err, ultimasLinhas(string(out), 3))
 	}
-	if st, err := os.Stat(novo); err != nil || st.Size() < gib {
-		_ = os.Remove(novo)
+	if st, err := os.Stat(gerado); err != nil || st.Size() < gib {
 		return errors.New("mapa novo pequeno demais; descartado")
+	}
+	if err := verificarPmtiles(ctx, pmtiles, gerado); err != nil {
+		return fmt.Errorf("mapa novo recortado com defeito: %v", err)
+	}
+	if gerado != novo {
+		a.andar("mapas", "Copiando e conferindo o mapa "+melhor+".")
+		if err := copiarConferido(gerado, novo); err != nil {
+			_ = os.Remove(novo)
+			return err
+		}
+		if err := verificarPmtiles(ctx, pmtiles, novo); err != nil {
+			_ = os.Remove(novo)
+			return fmt.Errorf("cópia do mapa com defeito: %v", err)
+		}
 	}
 	if err := os.Rename(novo, a.cfg.Caminho("mapas", "america-sul.pmtiles")); err != nil {
 		return err
 	}
+	// O resumo antigo descreve o mapa anterior.
+	_ = os.Remove(a.cfg.Caminho("mapas", "america-sul.pmtiles.sha256"))
 	j, _ := json.Marshal(estadoMapa{Geracao: strings.TrimSuffix(melhor, ".pmtiles"), Data: time.Now()})
 	_ = os.WriteFile(a.cfg.Caminho("mapas", "atualizacao.json"), j, 0o644)
 	reg.UltimaConferencia["mapas"] = time.Now()
@@ -515,6 +540,18 @@ func (a *Atualizador) reporRuntime(ctx context.Context) error {
 	a.kiwix.Reiniciar()
 	if a.rotas != nil {
 		a.rotas.Reiniciar()
+	}
+	return nil
+}
+
+// verificarPmtiles confere a estrutura do arquivo (cabeçalho, diretórios e
+// limites) sem abrir cada trecho do mapa.
+func verificarPmtiles(ctx context.Context, pmtiles, caminho string) error {
+	esquecerCache(caminho)
+	cmd := exec.CommandContext(ctx, pmtiles, "verify", caminho)
+	esconderJanela(cmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%v: %s", err, ultimasLinhas(string(out), 3))
 	}
 	return nil
 }

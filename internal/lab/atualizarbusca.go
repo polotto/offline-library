@@ -259,7 +259,7 @@ func copiarConferido(origem, destino string) error {
 		return err
 	}
 	if a != b {
-		return errors.New("cópia do índice diferente da origem; disco instável")
+		return errors.New("cópia diferente da origem; disco instável")
 	}
 	return nil
 }
