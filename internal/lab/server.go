@@ -68,6 +68,7 @@ func (s *Servidor) Rotas() http.Handler {
 	})
 	m.HandleFunc("GET /mapas/rotas", s.proxyRotas)
 	m.HandleFunc("GET /mapas/busca", s.busca.handler)
+	m.HandleFunc("GET /mapas/busca/pronta", s.busca.handlerPronta)
 	m.HandleFunc("GET /mapas/", s.mapas) // GET também atende HEAD
 	m.Handle("/wiki/", s.proxyKiwix())
 	m.HandleFunc("GET /wiki", func(w http.ResponseWriter, r *http.Request) {
