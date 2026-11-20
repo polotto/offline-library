@@ -1,6 +1,9 @@
 package lab
 
-import "testing"
+import (
+	"net"
+	"testing"
+)
 
 func TestComPorta(t *testing.T) {
 	casos := map[string]string{
@@ -12,5 +15,15 @@ func TestComPorta(t *testing.T) {
 		if obtido != esperado {
 			t.Errorf("obtido %q, esperado %q", obtido, esperado)
 		}
+	}
+}
+
+func TestPermitidoForaDaRede(t *testing.T) {
+	c := &Config{}
+	if c.Permitido(net.ParseIP("8.8.8.8")) {
+		t.Error("endereço de fora da rede aceito")
+	}
+	if !c.Permitido(net.ParseIP("192.168.0.9")) {
+		t.Error("endereço privado recusado")
 	}
 }

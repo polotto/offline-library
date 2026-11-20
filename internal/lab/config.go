@@ -82,7 +82,8 @@ func Carregar(dados string) (Config, error) {
 	return c, nil
 }
 
-// Permitido aceita a própria máquina e redes privadas. Com
+// Permitido aceita a própria máquina, redes privadas e a sub-rede das
+// interfaces da máquina (o IPv6 doméstico costuma ser público). Com
 // redes_permitidas, aceita só as redes listadas e a própria máquina.
 func (c *Config) Permitido(ip net.IP) bool {
 	if ip == nil {
@@ -99,7 +100,24 @@ func (c *Config) Permitido(ip net.IP) bool {
 		}
 		return false
 	}
-	return ip.IsPrivate() || ip.IsLinkLocalUnicast()
+	return ip.IsPrivate() || ip.IsLinkLocalUnicast() || naMesmaRede(ip)
+}
+
+// naMesmaRede diz se o endereço está na sub-rede de alguma interface ativa.
+func naMesmaRede(ip net.IP) bool {
+	ifaces, _ := net.Interfaces()
+	for _, i := range ifaces {
+		if i.Flags&net.FlagUp == 0 {
+			continue
+		}
+		addrs, _ := i.Addrs()
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && n.IP.IsGlobalUnicast() && n.Contains(ip) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Plataforma no formato das pastas de runtime, como linux-amd64.

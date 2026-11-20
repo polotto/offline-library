@@ -306,7 +306,7 @@ func (s *Servidor) vigiarColecoes(ctx context.Context) {
 
 func (s *Servidor) redirecionarPortasAntigas(ctx context.Context) {
 	for porta, caminho := range s.cfg.PortasAntigas {
-		caminho := "/" + strings.Trim(caminho, "/") + "/"
+		caminho := strings.TrimSuffix("/"+strings.Trim(caminho, "/"), "/") + "/"
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			host, _, err := net.SplitHostPort(r.Host)
 			if err != nil {
