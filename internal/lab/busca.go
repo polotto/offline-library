@@ -135,10 +135,10 @@ type respostaBusca struct {
 
 // Ajustes medidos no índice real (8,9 milhões de lugares).
 var (
-	orcamentoBusca = 220 * time.Millisecond // tempo das fontes, desde a chegada
-	folgaBusca     = 30 * time.Millisecond  // espera a mais pelas fontes que param
-	limiteFaixa    = 4000                   // linhas lidas por faixa de nome
-	limiteFTS      = 1500                   // linhas lidas por consulta FTS
+	orcamentoBusca = 170 * time.Millisecond // tempo das fontes, desde a chegada
+	folgaBusca     = 20 * time.Millisecond  // espera a mais pelas fontes que param
+	limiteFaixa    = 2500                   // linhas lidas por faixa de nome
+	limiteFTS      = 800                    // linhas lidas por consulta FTS
 	pesoForte      = 3.0                    // peso mínimo para ficar em memória
 	maxRespostas   = 256                    // respostas guardadas
 )
@@ -455,6 +455,8 @@ type termo struct {
 type consulta struct {
 	normal string  // texto sem acento, para a faixa de nome
 	termos []termo // sem palavras vazias
+	// temNumero: algum termo tem algarismo ("Av Paulista 1000").
+	temNumero bool
 }
 
 func montarConsulta(texto string) consulta {
@@ -476,6 +478,9 @@ func montarConsulta(texto string) consulta {
 			}
 		}
 		c.termos = append(c.termos, t)
+		if strings.ContainsAny(p, "0123456789") {
+			c.temNumero = true
+		}
 		if len(c.termos) == 8 {
 			break
 		}
@@ -641,10 +646,30 @@ func (c consulta) nota(l *Lugar, x *textoLugar, lat, lon float64, temCentro bool
 			}
 		}
 	}
+	// Sem número na consulta, a rua vem antes dos endereços numerados
+	// ("Rua X, 35") e dos pontos com nome de endereço (uma rodoviária
+	// chamada "Rua Joaquim Machado, 35").
+	if !c.temNumero && nomeComNumero(l.Nome) {
+		n -= 5
+	}
 	if temCentro {
 		n -= 2.2 * math.Log2(1+distanciaKm(lat, lon, l.Lat, l.Lon))
 	}
 	return n, true
+}
+
+// nomeComNumero diz se o nome tem ", " seguido de número: "Rua X, 35".
+func nomeComNumero(nome string) bool {
+	for {
+		i := strings.Index(nome, ", ")
+		if i < 0 {
+			return false
+		}
+		nome = nome[i+2:]
+		if nome != "" && nome[0] >= '0' && nome[0] <= '9' {
+			return true
+		}
+	}
 }
 
 // Procurar devolve até limite lugares. lat/lon (opcionais) puxam para

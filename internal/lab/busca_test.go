@@ -139,6 +139,8 @@ func TestProcurarRelevancia(t *testing.T) {
 		{"Rodoviária de Florianópolis", longe, "Terminal Rodoviário Rita Maria", "Florianópolis"},
 		{"Curitiba", longe, "Curitiba", ""},
 		{"Ru", curitiba, "", "Curitiba"},
+		{"Rua XV de Novembro Curitiba", [2]float64{-25.43, -49.2701}, "Rua XV de Novembro", "Curitiba"},
+		{"Rua XV de Novembro 100", curitiba, "Rua XV de Novembro, 100", "Curitiba"},
 		{"r xv", curitiba, "Rua XV de Novembro", "Curitiba"},
 	}
 	for _, c := range casos {
