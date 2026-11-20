@@ -45,7 +45,10 @@ LabOffline/
 ```
 
 `config/lab.json` (modelo em `exemplo/config/`) define nome, porta,
-redes permitidas e a hora da atualização automática.
+redes permitidas e a hora da atualização automática. Com `"porta": 80`
+o endereço abre sem digitar a porta; no Linux, o serviço precisa de
+`AmbientCapabilities=CAP_NET_BIND_SERVICE` (já no exemplo em
+`implantacao/lab.service`).
 
 ## Desenvolver
 

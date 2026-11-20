@@ -13,6 +13,9 @@ Environment=GOMEMLIMIT=400MiB
 ExecStart=/srv/offline/LabOffline/bin/lab-linux-amd64 servir --dados /srv/offline/LabOffline
 Restart=on-failure
 RestartSec=10
+# Permite "porta": 80 no config/lab.json sem rodar como root, para abrir
+# no navegador sem digitar a porta.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 # Kiwix e Java são filhos do lab e saem junto.
 KillMode=control-group
 MemoryMax=1200M

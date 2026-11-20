@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -262,12 +263,20 @@ func Enderecos(porta int) string {
 		addrs, _ := i.Addrs()
 		for _, a := range addrs {
 			if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil && n.IP.IsPrivate() {
-				lista = append(lista, fmt.Sprintf("%s:%d", n.IP, porta))
+				lista = append(lista, comPorta(n.IP.String(), porta))
 			}
 		}
 	}
-	lista = append(lista, fmt.Sprintf("127.0.0.1:%d", porta))
+	lista = append(lista, comPorta("127.0.0.1", porta))
 	return strings.Join(lista, " e http://")
+}
+
+// comPorta junta host e porta e omite a 80, padrão do navegador.
+func comPorta(host string, porta int) string {
+	if porta == 80 {
+		return host
+	}
+	return net.JoinHostPort(host, strconv.Itoa(porta))
 }
 
 // vigiarColecoes reinicia o Kiwix quando a lista de coleções conferidas
@@ -303,7 +312,7 @@ func (s *Servidor) redirecionarPortasAntigas(ctx context.Context) {
 			if err != nil {
 				host = r.Host
 			}
-			destino := fmt.Sprintf("http://%s:%d%s%s", host, s.cfg.Porta, caminho, strings.TrimPrefix(r.URL.Path, "/"))
+			destino := "http://" + comPorta(host, s.cfg.Porta) + caminho + strings.TrimPrefix(r.URL.Path, "/")
 			if r.URL.RawQuery != "" {
 				destino += "?" + r.URL.RawQuery
 			}
