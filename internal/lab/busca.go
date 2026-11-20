@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"math"
 	"math/rand/v2"
 	"net/http"
@@ -48,6 +47,60 @@ type indiceBusca struct {
 	ordenado bool  // ids seguem a ordem do nome sem acento
 	maxID    int64 // maior id de lugares
 	fortes   []lugarForte
+	// baldes liga as duas primeiras letras de cada palavra aos índices
+	// em fortes que têm essa palavra. Evita varrer todos a cada tecla.
+	baldes map[string][]int32
+	// fama é o bônus de ruas com muitos endereços na mesma cidade
+	// (Avenida Paulista em São Paulo, Rua XV em Curitiba), por id.
+	fama map[int64]float64
+}
+
+// baldesDe monta os baldes de duas letras dos lugares fortes.
+func baldesDe(fortes []lugarForte) map[string][]int32 {
+	m := map[string][]int32{}
+	for i := range fortes {
+		x := &fortes[i].txt
+		vistos := map[string]bool{}
+		for _, campo := range []string{x.nome, x.tipo, x.bairro, x.cidade} {
+			for _, w := range strings.Fields(campo) {
+				if len(w) < 2 {
+					continue
+				}
+				k := w[:2]
+				if !vistos[k] {
+					vistos[k] = true
+					m[k] = append(m[k], int32(i))
+				}
+			}
+		}
+	}
+	return m
+}
+
+// candidatosFortes devolve os índices em fortes que podem casar com a
+// consulta: o balde do termo mais longo. nil quer dizer "todos".
+func (e *indiceBusca) candidatosFortes(c consulta) ([]int32, bool) {
+	if e.baldes == nil {
+		return nil, false
+	}
+	melhor := -1
+	for i, t := range c.termos {
+		if len(t.texto) >= 2 && (melhor < 0 || len(t.texto) > len(c.termos[melhor].texto)) {
+			melhor = i
+		}
+	}
+	if melhor < 0 {
+		return nil, false
+	}
+	t := c.termos[melhor]
+	lista := e.baldes[t.texto[:2]]
+	if t.extenso != "" && t.extenso[:2] != t.texto[:2] {
+		lista = append(append([]int32(nil), lista...), e.baldes[t.extenso[:2]]...)
+	}
+	if t.outro != "" && t.outro[:2] != t.texto[:2] {
+		lista = append(append([]int32(nil), lista...), e.baldes[t.outro[:2]]...)
+	}
+	return lista, true
 }
 
 type lugarForte struct {
@@ -82,12 +135,16 @@ type respostaBusca struct {
 
 // Ajustes medidos no índice real (8,9 milhões de lugares).
 var (
-	orcamentoBusca = 250 * time.Millisecond // tempo máximo de uma busca
+	orcamentoBusca = 220 * time.Millisecond // tempo das fontes, desde a chegada
+	folgaBusca     = 30 * time.Millisecond  // espera a mais pelas fontes que param
 	limiteFaixa    = 4000                   // linhas lidas por faixa de nome
 	limiteFTS      = 1500                   // linhas lidas por consulta FTS
 	pesoForte      = 3.0                    // peso mínimo para ficar em memória
 	maxRespostas   = 256                    // respostas guardadas
 )
+
+// medirEtapa, se definido (só em teste), recebe o tempo de cada fonte.
+var medirEtapa func(nome string, d time.Duration, err error)
 
 func AbrirBusca(cfg *Config) *Busca {
 	return &Busca{caminho: cfg.ArquivoBusca()}
@@ -175,9 +232,135 @@ func (b *Busca) carregar(ctx context.Context, db *sql.DB) {
 	if rows.Err() != nil {
 		return
 	}
+	rows.Close()
 	novo := *est
 	novo.fortes = fortes
+	novo.baldes = baldesDe(fortes)
 	b.publicar(db, &novo)
+
+	// Segunda volta, mais demorada: ruas famosas.
+	famosas, fama, err := ruasFamosas(ctx, db)
+	if err != nil {
+		return
+	}
+	for i := range famosas {
+		f := &famosas[i]
+		if t, ok := tipos[f.Tipo]; ok {
+			f.Tipo, f.txt.tipo = t[0], t[1]
+		}
+	}
+	final := novo
+	final.fortes = append(fortes[:len(fortes):len(fortes)], famosas...)
+	final.baldes = baldesDe(final.fortes)
+	final.fama = fama
+	b.publicar(db, &final)
+}
+
+// Uma rua é famosa com pelo menos minEnderecosFama endereços na mesma
+// cidade. O bônus cresce devagar: 2 × log2(n / 25).
+const minEnderecosFama = 50
+
+func bonusFama(n int) float64 { return 2 * math.Log2(float64(n)/25) }
+
+// ruasFamosas conta os endereços ("Rua X, 123") por rua e cidade e
+// devolve as linhas das ruas com muitos endereços. Usa a ordem dos ids:
+// os endereços de uma rua vêm juntos, logo antes da própria rua
+// ("rua x, 1" < "rua x|", porque "," vem antes de "|").
+func ruasFamosas(ctx context.Context, db *sql.DB) ([]lugarForte, map[int64]float64, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, nome, detalhe, tipo, lat, lon, peso FROM lugares
+		WHERE tipo IN ('Endereço', 'Rua', 'Avenida ou rua principal', 'Rodovia')`)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	// pend guarda as ruas famosas cuja linha da própria rua ainda vem.
+	type pendente struct {
+		rua, cidade string
+		n           int
+		emMemoria   bool // um trecho já entrou nos fortes
+	}
+	var (
+		famosas  []lugarForte
+		fama     = map[int64]float64{}
+		pend     []pendente
+		ruaAtual string
+		contagem = map[string]int{}
+	)
+	fecharRua := func() {
+		if ruaAtual == "" {
+			return
+		}
+		for cid, n := range contagem {
+			if n >= minEnderecosFama {
+				pend = append(pend, pendente{rua: ruaAtual, cidade: cid, n: n})
+			}
+		}
+		clear(contagem)
+	}
+	for rows.Next() {
+		var f lugarForte
+		if err := rows.Scan(&f.id, &f.Nome, &f.Detalhe, &f.Tipo, &f.Lat, &f.Lon, &f.peso); err != nil {
+			return nil, nil, err
+		}
+		if f.Tipo == "Endereço" {
+			i := strings.Index(f.Nome, ", ")
+			if i <= 0 {
+				continue
+			}
+			// Compara sem acento: a ordem dos ids é a do nome sem acento,
+			// e a mesma rua aparece com maiúsculas diferentes.
+			if rua := semAcentoRapido(f.Nome[:i]); rua != ruaAtual {
+				fecharRua()
+				ruaAtual = rua
+			}
+			contagem[cidadeDe(f.Detalhe)]++
+			continue
+		}
+		// Linha de rua: a contagem da rua anterior acabou, salvo se o
+		// nome dela continua a rua ("Rua X, Travessa" no meio de "Rua X, 12").
+		norm := semAcentoRapido(f.Nome)
+		if ruaAtual != "" && strings.HasPrefix(norm, ruaAtual+", ") {
+			continue
+		}
+		fecharRua()
+		ruaAtual = ""
+		if len(pend) == 0 {
+			continue
+		}
+		// Tira as ruas que já passaram na ordem.
+		k := 0
+		for _, p := range pend {
+			if strings.HasPrefix(norm, p.rua) {
+				pend[k] = p
+				k++
+			}
+		}
+		pend = pend[:k]
+		for i := range pend {
+			p := &pend[i]
+			if p.rua == norm && p.cidade == cidadeDe(f.Detalhe) {
+				// Todo trecho ganha o bônus; só um fica em memória, para
+				// os prefixos curtos (os outros vêm do disco).
+				fama[f.id] = bonusFama(p.n)
+				if !p.emMemoria {
+					p.emMemoria = true
+					f.txt = prepararTexto(&f.Lugar)
+					famosas = append(famosas, f)
+				}
+				break
+			}
+		}
+	}
+	return famosas, fama, rows.Err()
+}
+
+// cidadeDe tira a cidade do detalhe ("Tipo · Bairro, Cidade").
+func cidadeDe(detalhe string) string {
+	_, ctxto, _ := strings.Cut(detalhe, " · ")
+	if i := strings.LastIndex(ctxto, ", "); i >= 0 {
+		ctxto = ctxto[i+2:]
+	}
+	return ctxto
 }
 
 // publicar troca o estado só se o banco ainda for o mesmo.
@@ -221,7 +404,7 @@ func idsOrdenados(ctx context.Context, db *sql.DB, maxID int64) bool {
 }
 
 // chaveNome repete o começo da chave do gerador (gerarbusca.go).
-func chaveNome(nome string) string { return semAcento(nome) + "|" }
+func chaveNome(nome string) string { return semAcentoRapido(nome) + "|" }
 
 type Lugar struct {
 	Nome    string  `json:"nome"`
@@ -354,7 +537,67 @@ func (t termo) achar(normal string) bool {
 	return t.extenso != "" && strings.Contains(normal, " "+t.extenso+" ")
 }
 
-func normalPalavras(s string) string { return " " + strings.Join(palavras(s), " ") + " " }
+// normalPalavras devolve " palavra palavra " sem acento. Texto só em
+// ASCII (a maioria dos nomes) vai pelo caminho rápido, sem NFD.
+func normalPalavras(s string) string {
+	if !soASCII(s) {
+		return " " + strings.Join(palavras(s), " ") + " "
+	}
+	b := make([]byte, 0, len(s)+2)
+	b = append(b, ' ')
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch {
+		case ch >= 'A' && ch <= 'Z':
+			b = append(b, ch+'a'-'A')
+		case ch >= 'a' && ch <= 'z', ch >= '0' && ch <= '9':
+			b = append(b, ch)
+		default:
+			if b[len(b)-1] != ' ' {
+				b = append(b, ' ')
+			}
+		}
+	}
+	if b[len(b)-1] != ' ' {
+		b = append(b, ' ')
+	}
+	return string(b)
+}
+
+func soASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
+// semAcentoRapido é semAcento com caminho rápido para ASCII.
+func semAcentoRapido(s string) string {
+	if !soASCII(s) {
+		return semAcento(s)
+	}
+	b := make([]byte, 0, len(s))
+	espaco := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch ch {
+		case ' ', '\t', '\n', '\r', '\f', '\v':
+			espaco = true
+			continue
+		}
+		if espaco && len(b) > 0 {
+			b = append(b, ' ')
+		}
+		espaco = false
+		if ch >= 'A' && ch <= 'Z' {
+			ch += 'a' - 'A'
+		}
+		b = append(b, ch)
+	}
+	return string(b)
+}
 
 // nota pontua um lugar que tem todos os termos. Devolve false se faltar
 // algum termo.
@@ -363,7 +606,8 @@ func (c consulta) nota(l *Lugar, x *textoLugar, lat, lon float64, temCentro bool
 	n := l.peso
 	for i, t := range c.termos {
 		achou := false
-		if t.achar(tipo) {
+		// Prefixo curto ("p") no tipo casaria "principal" em toda avenida.
+		if (!t.prefixo || len(t.texto) >= 3) && t.achar(tipo) {
 			n += 3 // pediu pela categoria: "rodoviária", "hospital"
 			achou = true
 		}
@@ -386,7 +630,7 @@ func (c consulta) nota(l *Lugar, x *textoLugar, lat, lon float64, temCentro bool
 	// Bônus para o nome que começa pelo texto todo. Só calcula o nome
 	// sem acento quando o primeiro termo já abre o nome.
 	if t := c.termos[0]; strings.HasPrefix(nome, " "+t.texto) || (t.extenso != "" && strings.HasPrefix(nome, " "+t.extenso)) {
-		nn := semAcento(l.Nome)
+		nn := semAcentoRapido(l.Nome)
 		for _, p := range c.prefixos() {
 			if nn == p {
 				n += 6
@@ -406,6 +650,7 @@ func (c consulta) nota(l *Lugar, x *textoLugar, lat, lon float64, temCentro bool
 // Procurar devolve até limite lugares. lat/lon (opcionais) puxam para
 // perto. parcial indica que alguma fonte parou no limite ou no tempo.
 func (b *Busca) Procurar(ctx context.Context, texto string, lat, lon float64, temCentro bool, limite int) ([]Lugar, bool, error) {
+	inicio := time.Now()
 	db := b.abrir()
 	if db == nil {
 		return nil, false, os.ErrNotExist
@@ -426,89 +671,143 @@ func (b *Busca) Procurar(ctx context.Context, texto string, lat, lon float64, te
 		est = &indiceBusca{}
 	}
 
-	achados := map[int64]Lugar{}
-	parcial := false
+	// O orçamento conta desde a chegada do pedido. As fontes rodam em
+	// paralelo, cada uma na sua conexão, e somam no mesmo mapa.
+	tctx, cancelar := context.WithDeadline(ctx, inicio.Add(orcamentoBusca))
+	defer cancelar()
+	var (
+		mu      sync.Mutex
+		achados = map[int64]Lugar{}
+		parcial bool
+		falha   error
+		fechado bool
+	)
 	somarTexto := func(id int64, l Lugar, x *textoLugar) {
-		if _, ja := achados[id]; ja {
-			return
-		}
 		if x == nil {
 			t := prepararTexto(&l)
 			x = &t
 		}
-		if n, ok := c.nota(&l, x, lat, lon, temCentro); ok {
-			l.nota = n
-			achados[id] = l
+		n, ok := c.nota(&l, x, lat, lon, temCentro)
+		if !ok {
+			return
 		}
+		l.nota = n + est.fama[id]
+		mu.Lock()
+		if !fechado {
+			if velho, ja := achados[id]; !ja || velho.nota < l.nota {
+				achados[id] = l
+			}
+		}
+		mu.Unlock()
 	}
 	somar := func(id int64, l Lugar) { somarTexto(id, l, nil) }
+	terminar := func(nome string, ini time.Time, cheio bool, err error) {
+		if medirEtapa != nil {
+			medirEtapa(nome, time.Since(ini), err)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case err != nil && tctx.Err() != nil:
+			parcial = true // tempo esgotado ou cliente foi embora
+		case err != nil:
+			falha = err
+		case cheio:
+			parcial = true
+		}
+	}
+	var wg sync.WaitGroup
+	rodar := func(nome string, f func() (bool, error)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ini := time.Now()
+			cheio, err := f()
+			terminar(nome, ini, cheio, err)
+		}()
+	}
 
 	// 1. Lugares fortes em memória.
-	for i := range est.fortes {
-		if i%8192 == 0 && ctx.Err() != nil {
-			return nil, false, ctx.Err()
+	rodar("memoria", func() (bool, error) {
+		// Só memória: segue mesmo com o orçamento no fim, para a cidade
+		// não sumir; para se o cliente desistir.
+		if cand, ok := est.candidatosFortes(c); ok {
+			for i, k := range cand {
+				if i%8192 == 0 && ctx.Err() != nil {
+					return false, ctx.Err()
+				}
+				f := &est.fortes[k]
+				somarTexto(f.id, f.Lugar, &f.txt)
+			}
+			return false, nil
 		}
-		f := &est.fortes[i]
-		somarTexto(f.id, f.Lugar, &f.txt)
-	}
-
-	tctx, cancelar := context.WithTimeout(ctx, orcamentoBusca)
-	defer cancelar()
-	tempoEsgotado := func(err error) bool {
-		if ctx.Err() != nil {
-			return false
+		for i := range est.fortes {
+			if i%8192 == 0 && ctx.Err() != nil {
+				return false, ctx.Err()
+			}
+			f := &est.fortes[i]
+			somarTexto(f.id, f.Lugar, &f.txt)
 		}
-		return tctx.Err() != nil || errors.Is(err, context.DeadlineExceeded)
-	}
+		return false, nil
+	})
 
 	// 2. Faixa de nome: nomes que começam pelo texto e, se o primeiro
-	// termo for abreviação, pela forma por extenso.
-	// Uma palavra curta sozinha ("Ru", "Rua") casa milhões de linhas em
-	// ordem alfabética: lê pouco da faixa e pula o FTS, que não ajudam.
+	// termo for abreviação, pela forma por extenso. Uma palavra curta
+	// sozinha ("Ru", "Rua") casa milhões de linhas em ordem alfabética:
+	// lê pouco da faixa e pula o FTS, que não ajudam.
 	curta := len(c.termos) == 1 && len([]rune(c.termos[0].texto)) <= 3
 	if est.ordenado && !strings.Contains(c.normal, "|") {
-		limite := limiteFaixa
+		lim := limiteFaixa
 		if curta {
-			limite = limiteFaixa / 6
+			lim = limiteFaixa / 6
 		}
 		for _, p := range c.prefixos() {
-			cheio, err := faixaNome(tctx, db, est.maxID, p, limite, somar)
-			if err != nil {
-				if tempoEsgotado(err) {
-					parcial = true
-					break
-				}
-				return nil, false, err
-			}
-			parcial = parcial || cheio
+			rodar("faixa "+p, func() (bool, error) { return faixaNome(tctx, db, est.maxID, p, lim, somar) })
 		}
 	}
 
 	// 3. FTS sem ordenar por rank.
-	if q := c.fts(); q != "" && !curta && tctx.Err() == nil {
-		cheio, err := lerFTS(tctx, db, q, somar)
-		if err != nil {
-			if !tempoEsgotado(err) {
-				if ctx.Err() != nil {
-					return nil, false, ctx.Err()
-				}
-				return nil, false, err
-			}
-			parcial = true
-		}
-		parcial = parcial || cheio
+	if q := c.fts(); q != "" && !curta {
+		rodar("fts", func() (bool, error) { return lerFTS(tctx, db, q, somar) })
 	}
-	if curta {
-		parcial = true
+
+	// Espera as fontes. Se o orçamento acabar, segue com o que já veio:
+	// as fontes param sozinhas pelo contexto e o que chegar depois é
+	// descartado.
+	pronto := make(chan struct{})
+	go func() { wg.Wait(); close(pronto) }()
+	esgotou := false
+	select {
+	case <-pronto:
+	case <-tctx.Done():
+		select {
+		case <-pronto:
+		case <-time.After(folgaBusca):
+		}
+		esgotou = true
 	}
 	if ctx.Err() != nil {
 		return nil, false, ctx.Err()
 	}
-
+	mu.Lock()
+	fechado = true
+	if esgotou {
+		parcial = true
+	}
+	if falha != nil {
+		mu.Unlock()
+		return nil, false, falha
+	}
 	lista := make([]Lugar, 0, len(achados))
 	for _, l := range achados {
 		lista = append(lista, l)
 	}
+	if curta {
+		parcial = true
+	}
+	parc := parcial
+	mu.Unlock()
+
 	sort.Slice(lista, func(i, j int) bool {
 		if lista[i].nota != lista[j].nota {
 			return lista[i].nota > lista[j].nota
@@ -517,9 +816,9 @@ func (b *Busca) Procurar(ctx context.Context, texto string, lat, lon float64, te
 	})
 	lista = juntarRepetidos(lista, limite)
 	if tctx.Err() == nil {
-		b.guardar(chave, respostaBusca{lista, parcial})
+		b.guardar(chave, respostaBusca{lista, parc})
 	}
-	return lista, parcial, nil
+	return lista, parc, nil
 }
 
 // juntarRepetidos tira o mesmo lugar que aparece mais de uma vez: um rua
@@ -527,13 +826,7 @@ func (b *Busca) Procurar(ctx context.Context, texto string, lat, lon float64, te
 // principal"). Mesmo nome, mesma cidade e perto: fica o de nota maior,
 // que já vem antes na lista.
 func juntarRepetidos(lista []Lugar, limite int) []Lugar {
-	cidade := func(l *Lugar) string {
-		_, ctxto, _ := strings.Cut(l.Detalhe, " · ")
-		if i := strings.LastIndex(ctxto, ", "); i >= 0 {
-			ctxto = ctxto[i+2:]
-		}
-		return ctxto
-	}
+	cidade := func(l *Lugar) string { return cidadeDe(l.Detalhe) }
 	var out []Lugar
 	for i := range lista {
 		l := &lista[i]
@@ -544,7 +837,7 @@ func juntarRepetidos(lista []Lugar, limite int) []Lugar {
 			if cidade(l) == "" {
 				raio = 1
 			}
-			if semAcento(o.Nome) == semAcento(l.Nome) && cidade(o) == cidade(l) &&
+			if semAcentoRapido(o.Nome) == semAcentoRapido(l.Nome) && cidade(o) == cidade(l) &&
 				distanciaKm(o.Lat, o.Lon, l.Lat, l.Lon) < raio {
 				repetido = true
 				break

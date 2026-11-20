@@ -90,7 +90,7 @@ func buscaPronta(t *testing.T, caminho string) *Busca {
 		t.Fatal("índice não abriu")
 	}
 	for i := 0; i < 200; i++ {
-		if e := b.estado.Load(); e != nil && e.fortes != nil {
+		if e := b.estado.Load(); e != nil && e.fama != nil {
 			return b
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -260,7 +260,7 @@ func TestMedirBuscaReal(t *testing.T) {
 	b := &Busca{caminho: caminho}
 	defer b.Fechar()
 	b.abrir()
-	for os.Getenv("BUSCA_SEM_ESPERA") != "1" && (b.estado.Load() == nil || b.estado.Load().fortes == nil) {
+	for os.Getenv("BUSCA_SEM_ESPERA") != "1" && (b.estado.Load() == nil || b.estado.Load().fama == nil) {
 		time.Sleep(20 * time.Millisecond)
 		if time.Since(ini) > 5*time.Minute {
 			t.Fatal("carregador não terminou")
@@ -273,7 +273,13 @@ func TestMedirBuscaReal(t *testing.T) {
 	runtime.GC()
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
-	t.Logf("carregador: %v, ordenado=%v, fortes=%d, heap=%d MB", time.Since(ini).Round(time.Millisecond), e.ordenado, len(e.fortes), mem.HeapAlloc>>20)
+	t.Logf("carregador: %v, ordenado=%v, fortes=%d, famosas=%d, heap=%d MB", time.Since(ini).Round(time.Millisecond), e.ordenado, len(e.fortes), len(e.fama), mem.HeapAlloc>>20)
+	if os.Getenv("BUSCA_ETAPAS") == "1" {
+		medirEtapa = func(nome string, d time.Duration, err error) {
+			t.Logf("    etapa %-28q %7.1f ms %v", nome, float64(d.Microseconds())/1000, err)
+		}
+		defer func() { medirEtapa = nil }()
+	}
 	consultas := []string{"Rua XV de Novembro Curitiba", "Av Paulista 1000", "Rodoviaria de Florianopolis", "Ru", "Rua"}
 	if v := os.Getenv("BUSCA_CONSULTAS"); v != "" {
 		consultas = strings.Split(v, "|")
@@ -305,10 +311,30 @@ func TestMedirBuscaReal(t *testing.T) {
 				primeiro = lista[0].Nome + " | " + lista[0].Detalhe
 			}
 			t.Logf("%v %-30q %7.1f ms parcial=%-5v %v %s", centro, q, float64(d.Microseconds())/1000, parcial, err, primeiro)
+			if os.Getenv("BUSCA_TOP") == "1" {
+				for i, l := range lista {
+					t.Logf("      %2d %6.2f %s | %s", i+1, l.nota, l.Nome, l.Detalhe)
+				}
+			}
 		}
 		t.Logf("%v pior: %v", centro, pior)
 		b.respMu.Lock()
 		b.respostas, b.ordemResp = nil, nil // sem cache de resposta entre centros
 		b.respMu.Unlock()
+	}
+}
+
+func TestCaminhoRapidoIgualAoLento(t *testing.T) {
+	for _, s := range []string{"Rua XV de Novembro, 100", "  Av.  Paulista\t1000 ", "São Paulo", "R. d'Oeste-2", "", "A|B"} {
+		if a, b := semAcentoRapido(s), semAcento(s); a != b {
+			t.Errorf("semAcentoRapido(%q) = %q, quer %q", s, a, b)
+		}
+		lento := " " + strings.Join(palavras(s), " ") + " "
+		if lento == "  " {
+			lento = " "
+		}
+		if a := normalPalavras(s); a != lento {
+			t.Errorf("normalPalavras(%q) = %q, quer %q", s, a, lento)
+		}
 	}
 }
