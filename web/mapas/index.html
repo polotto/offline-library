@@ -106,11 +106,22 @@ async function iniciar() {
         : 'Visão geral com zoom limitado. Ruas do continente ainda baixando.';
     }
     maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
-    const map = new maplibregl.Map({container:'map',style:estilo(modo),
-      center:modo === 'curitiba' ? [-49.27,-25.43] : [-59,-20],
-      zoom:modo === 'curitiba' ? 12 : 2.6,
+    // Abre na última vista do visitante. #zoom/lat/lon na URL vence a vista
+    // salva (opção hash do MapLibre). Sem nenhuma das duas, a vista padrão.
+    let vista = null;
+    try {
+      const v = JSON.parse(localStorage.getItem('mapa-vista'));
+      if (v && Number.isFinite(v.lng) && Number.isFinite(v.lat) && Number.isFinite(v.zoom)) vista = v;
+    } catch (_) {}
+    const map = new maplibregl.Map({container:'map',style:estilo(modo),hash:true,
+      center:vista ? [vista.lng,vista.lat] : modo === 'curitiba' ? [-49.27,-25.43] : [-59,-20],
+      zoom:vista ? vista.zoom : modo === 'curitiba' ? 12 : 2.6,
       maxZoom:modo === 'panorama' ? 8 : 18,
       maxBounds:modo === 'curitiba' ? limitesCuritiba : undefined});
+    map.on('moveend', () => {
+      const c = map.getCenter();
+      try { localStorage.setItem('mapa-vista', JSON.stringify({lng:+c.lng.toFixed(5),lat:+c.lat.toFixed(5),zoom:+map.getZoom().toFixed(2)})); } catch (_) {}
+    });
     map.addControl(new maplibregl.NavigationControl());
     map.addControl(new maplibregl.ScaleControl({unit:'metric'}));
     const rotas = instalarRotas(map);

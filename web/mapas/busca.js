@@ -55,11 +55,32 @@ const buscaUtil = (() => {
     return saida;
   }
 
-  // O lugar ainda serve para o texto atual? Cada termo precisa ser começo
-  // de alguma palavra do nome ou do detalhe.
+  // O lugar ainda serve para o texto atual? Segue as regras do servidor
+  // (montarConsulta em internal/lab/busca.go), mas do lado folgado: o
+  // filtro local só tira o que claramente deixou de casar.
+  // - "de", "da", "do", "dos", "das" e "e" não contam;
+  // - abreviação vale pela forma por extenso ("av" acha "avenida");
+  // - palavra de 5 letras ou mais vale nos dois gêneros ("rodoviaria" acha
+  //   "rodoviario");
+  // - o tipo conta como palavra; termo de 1 letra não decide nada;
+  // - termo com algarismo não decide: para "Av Paulista 1000" o servidor
+  //   devolve também a rua sem número;
+  // - qualquer termo vale como começo de palavra (o servidor exige palavra
+  //   inteira nos termos do meio; aqui ser folgado só mantém mais itens).
+  const VAZIAS = new Set(['de', 'da', 'do', 'dos', 'das', 'e']);
+  const ABREVIACOES = {av: 'avenida', r: 'rua', al: 'alameda', pca: 'praca', tv: 'travessa',
+    trav: 'travessa', est: 'estrada', rod: 'rodovia', lgo: 'largo', dr: 'doutor', prof: 'professor',
+    pres: 'presidente', cel: 'coronel', mal: 'marechal', gen: 'general', sen: 'senador',
+    gov: 'governador', sta: 'santa', sto: 'santo', eng: 'engenheiro', dep: 'deputado'};
   function casa(l, consulta) {
-    const palavras = termosDe(l.nome + ' ' + (l.detalhe || ''));
-    return termosDe(consulta).every(t => palavras.some(p => p.startsWith(t)));
+    const termos = termosDe(consulta).filter(t => t.length > 1 && !VAZIAS.has(t) && !/\d/.test(t));
+    if (!termos.length) return true;
+    const palavras = termosDe([l.nome, l.tipo, l.detalhe].filter(Boolean).join(' '));
+    return termos.every(t => {
+      const formas = [t.length >= 5 && /[ao]$/.test(t) ? t.slice(0, -1) : t];
+      if (ABREVIACOES[t]) formas.push(ABREVIACOES[t]);
+      return palavras.some(p => formas.some(f => p.startsWith(f)));
+    });
   }
 
   // O texto novo continua o texto velho? Então a resposta velha ainda ajuda.
@@ -177,6 +198,7 @@ const instalarBusca = (() => {
     li.setAttribute('role', 'presentation');
     li.append(texto);
     if (botao) li.append(botao);
+    li.dataset.assinatura = classe + '|' + texto;
     return li;
   }
 
@@ -184,6 +206,9 @@ const instalarBusca = (() => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = classe;
+    // Padrão de combobox: as opções não são paradas do Tab. Tab sai do
+    // campo e fecha a lista; as setas, Enter e Alt+A ou Alt+B escolhem.
+    b.tabIndex = -1;
     b.append(...conteudo);
     if (titulo) { b.title = titulo; b.setAttribute('aria-label', titulo); }
     b.onclick = acao;
@@ -212,6 +237,18 @@ const instalarBusca = (() => {
     return {itens: base.lugares, velha: true};
   }
 
+  // Troca só as linhas que mudaram. Quando a resposta do servidor traz o
+  // mesmo lugar no topo, o topo fica intacto e não pisca.
+  function aplicarLinhas(novas) {
+    const velhas = [...lista.children];
+    novas.forEach((li, i) => {
+      const atual = velhas[i];
+      if (!atual) lista.append(li);
+      else if (atual.dataset.assinatura !== li.dataset.assinatura) atual.replaceWith(li);
+    });
+    velhas.slice(novas.length).forEach(li => li.remove());
+  }
+
   // Desenha a lista com o estado atual, sem esconder durante a espera.
   function desenhar() {
     const q = listaDaEscolha ? base.q : consulta();
@@ -227,7 +264,10 @@ const instalarBusca = (() => {
       li.id = 'busca-op-' + i;
       li.setAttribute('aria-selected', String(i === ativo));
       if (velha) li.className = 'busca-velha';
-      if (escolhido && l.nome === escolhido.nome && l.lat === escolhido.lat && l.lon === escolhido.lon) li.dataset.escolhido = 'true';
+      const marcado = !!escolhido && l.nome === escolhido.nome && l.lat === escolhido.lat && l.lon === escolhido.lon;
+      if (marcado) li.dataset.escolhido = 'true';
+      // Linha igual à que já está na tela não é refeita (ver aplicarLinhas).
+      li.dataset.assinatura = [i, l.nome, l.detalhe, l.lat, l.lon, recente ? '' : q, velha, marcado, i === ativo].join('|');
       const nome = document.createElement('span');
       nome.className = 'busca-nome';
       nome.append(...textoDestacado(l.nome, recente ? '' : q));
@@ -235,8 +275,8 @@ const instalarBusca = (() => {
       det.textContent = l.detalhe || l.tipo || '';
       li.append(
         botao([nome, det], '', 'busca-ir', () => ir(l)),
-        botao(rotulo('A', 'Origem'), 'Usar ' + l.nome + ' como origem A', 'busca-ab', () => ir(l, 0)),
-        botao(rotulo('B', 'Destino'), 'Usar ' + l.nome + ' como destino B', 'busca-ab', () => ir(l, 1)));
+        botao(rotulo('A', 'Origem'), 'Usar ' + l.nome + ' como origem A (Alt+A)', 'busca-ab', () => ir(l, 0)),
+        botao(rotulo('B', 'Destino'), 'Usar ' + l.nome + ' como destino B (Alt+B)', 'busca-ab', () => ir(l, 1)));
       itens.push(li);
     });
     if (!recente) {
@@ -253,7 +293,7 @@ const instalarBusca = (() => {
         itens.push(linhaInfo('busca-parcial', 'Resultados resumidos para responder rápido. Digite mais para refinar.'));
       }
     }
-    lista.replaceChildren(...itens);
+    aplicarLinhas(itens);
     if (!itens.length) { fechar(); return; }
     lista.hidden = false;
     campo.setAttribute('aria-expanded', 'true');
@@ -283,9 +323,17 @@ const instalarBusca = (() => {
     if (n < base.n) return;
     if (!buscaUtil.continua(consulta(), q)) return;
     // Resposta resumida e vazia de prefixo curto não apaga a lista que serve.
-    const lugares = d.lugares || [];
+    let lugares = d.lugares || [];
     if (d.parcial && !lugares.length && base.lugares.some(l => buscaUtil.casa(l, consulta()))) return;
-    base = {q, lugares: d.lugares || [], parcial: !!d.parcial, n};
+    // Resposta resumida (parcial) é incompleta e tem ordem menos firme: o
+    // lugar que já está no topo e ainda casa com o texto continua no topo,
+    // mesmo que a resposta resumida não o traga. Resposta completa manda.
+    const topo = achados[0];
+    if (d.parcial && topo && !listaDaEscolha && !modoRecentes() && buscaUtil.casa(topo, consulta())) {
+      const outros = lugares.filter(l => !(l.nome === topo.nome && l.lat === topo.lat && l.lon === topo.lon));
+      lugares = [topo, ...outros].slice(0, Math.max(lugares.length, 1));
+    }
+    base = {q, lugares, parcial: !!d.parcial, n};
     if (falha && falha.q === q) falha = null;
     if (q === consulta()) {
       const total = base.lugares.length;
@@ -409,6 +457,11 @@ const instalarBusca = (() => {
       e.preventDefault();
       if (!aberta()) { agendar(); desenhar(); return; }
       mover(e.key === 'ArrowDown' ? 1 : -1);
+    } else if (e.key === 'Tab') {
+      fechar();
+    } else if (e.altKey && (e.code === 'KeyA' || e.code === 'KeyB') && aberta() && ativo >= 0 && achados[ativo]) {
+      e.preventDefault();
+      ir(achados[ativo], e.code === 'KeyA' ? 0 : 1);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       if (aberta()) {
@@ -481,6 +534,7 @@ const instalarBusca = (() => {
   });
   document.addEventListener('pointerdown', e => { if (!form.contains(e.target)) fechar(); });
 
+  limpar.tabIndex = -1; // pelo teclado, Esc apaga
   atualizarLimpar();
 
   // Chamado quando o mapa termina de abrir.
