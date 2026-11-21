@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -71,20 +72,29 @@ func (s *Servidor) enciclopedia(w http.ResponseWriter, r *http.Request) {
 
 func adaptarWiki(r *http.Request) bool {
 	destino := r.Header.Get("Sec-Fetch-Dest")
-	if r.Method != http.MethodGet || (destino != "" && destino != "document") || r.URL.Query().Get("original") == "1" {
+	if r.Method != http.MethodGet || (destino != "" && destino != "document") || r.URL.Query().Get("leitura") != "1" {
 		return false
 	}
-	return r.URL.Path == "/wiki/search" ||
-		strings.HasPrefix(r.URL.Path, "/wiki/content/wikipedia_") ||
-		strings.HasPrefix(r.URL.Path, "/wiki/content/wiktionary_")
+	return caminhoWiki(r.URL.Path)
+}
+
+func caminhoWiki(caminho string) bool {
+	return caminho == "/wiki/search" ||
+		strings.HasPrefix(caminho, "/wiki/content/wikipedia_") ||
+		strings.HasPrefix(caminho, "/wiki/content/wiktionary_")
 }
 
 func respostaWiki(resp *http.Response) error {
-	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
+	if !adaptarWiki(resp.Request) {
 		return nil
 	}
-	resp.Header.Add("Vary", "Sec-Fetch-Dest")
-	if !adaptarWiki(resp.Request) {
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		if destino := resp.Header.Get("Location"); destino != "" {
+			resp.Header.Set("Location", linkLeituraWiki(destino, resp.Request.URL))
+		}
+		return nil
+	}
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
 		return nil
 	}
 	const limite = 8 << 20
@@ -109,6 +119,7 @@ func respostaWiki(resp *http.Response) error {
 	if err != nil || !prepararWiki(pagina, resp.Request.URL.Path == "/wiki/search") {
 		return nil
 	}
+	propagarLeituraWiki(pagina, resp.Request.URL)
 	var saida bytes.Buffer
 	if err := html.Render(&saida, pagina); err != nil {
 		return nil
@@ -123,6 +134,32 @@ func respostaWiki(resp *http.Response) error {
 		"style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data:; font-src 'self' data:; base-uri 'none'")
 	resp.Body = io.NopCloser(&saida)
 	return nil
+}
+
+func propagarLeituraWiki(n *html.Node, base *url.URL) {
+	if n.Type == html.ElementNode && n.Data == "a" {
+		for i, attr := range n.Attr {
+			if attr.Key == "href" {
+				n.Attr[i].Val = linkLeituraWiki(attr.Val, base)
+				break
+			}
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		propagarLeituraWiki(c, base)
+	}
+}
+
+func linkLeituraWiki(valor string, base *url.URL) string {
+	link, err := url.Parse(valor)
+	if err != nil || link.IsAbs() || link.Host != "" || (link.Path == "" && link.RawQuery == "") ||
+		!caminhoWiki(base.ResolveReference(link).Path) {
+		return valor
+	}
+	q := link.Query()
+	q.Set("leitura", "1")
+	link.RawQuery = q.Encode()
+	return link.String()
 }
 
 func atributoWiki(n *html.Node, chave string) string {

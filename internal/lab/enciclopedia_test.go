@@ -2,6 +2,7 @@ package lab
 
 import (
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -41,8 +42,9 @@ func TestAdaptarWikiSoParaDocumentos(t *testing.T) {
 		metodo, caminho, destino string
 		adaptar                  bool
 	}{
-		{"GET", "/wiki/content/wiktionary_pt_2026-09/saudade", "document", true},
-		{"GET", "/wiki/search?pattern=saudade", "document", true},
+		{"GET", "/wiki/content/wiktionary_pt_2026-09/saudade?leitura=1", "", true},
+		{"GET", "/wiki/search?pattern=saudade&leitura=1", "document", true},
+		{"GET", "/wiki/content/wikipedia_pt_2026-05/Curitiba", "", false},
 		{"GET", "/wiki/content/wikipedia_pt_2026-05/Curitiba", "iframe", false},
 		{"GET", "/wiki/content/wikipedia_pt_2026-05/Curitiba?original=1", "document", false},
 		{"GET", "/wiki/content/wikipedia_pt_2026-05/foto.jpg", "image", false},
@@ -52,6 +54,20 @@ func TestAdaptarWikiSoParaDocumentos(t *testing.T) {
 		r.Header.Set("Sec-Fetch-Dest", caso.destino)
 		if adaptarWiki(r) != caso.adaptar {
 			t.Errorf("adaptação inesperada: %+v", caso)
+		}
+	}
+}
+
+func TestLinkLeituraWikiMantemDestino(t *testing.T) {
+	base, _ := url.Parse("http://lab.test/wiki/content/wikipedia_pt_2026-05/Curitiba?leitura=1")
+	for _, caso := range []struct{ link, esperado string }{
+		{"./Paraná#História", "./Paran%C3%A1?leitura=1#Hist%C3%B3ria"},
+		{"#História", "#História"},
+		{"/wiki/search?pattern=curitiba&start=25", "/wiki/search?leitura=1&pattern=curitiba&start=25"},
+		{"https://pt.wikipedia.org/wiki/Paraná", "https://pt.wikipedia.org/wiki/Paraná"},
+	} {
+		if obtido := linkLeituraWiki(caso.link, base); obtido != caso.esperado {
+			t.Errorf("%s: obtido %s, esperado %s", caso.link, obtido, caso.esperado)
 		}
 	}
 }
