@@ -45,3 +45,7 @@ teste após a criação da tabela de apontamentos em uma cópia sem a tabela.
 Os mapas de caracteres foram empacotados com a licença para que a
 verificação do GitHub possa examinar a lista completa de arquivos. A rota
 continua entregando cada mapa pelo nome original.
+
+A revisão remota apontou que a falha de um capítulo chega em
+`displayerror`. O teste removeu um capítulo de uma cópia do livro.
+O leitor mostrou a falha e voltou a abrir outro capítulo pelo sumário.

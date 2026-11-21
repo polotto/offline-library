@@ -116,7 +116,7 @@ async function lerEPUB() {
     proximo.disabled = local.atEnd;
     marcar(local.start.cfi);
   });
-  leitura.on("displayError", falha);
+  leitura.on("displayerror", falha);
   function listar(itens, nivel = "") {
     for (const item of itens) {
       const titulo = item.label.trim();
