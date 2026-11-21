@@ -1,6 +1,7 @@
 package lab
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"math"
@@ -83,7 +84,10 @@ func distanciaKm(lat1, lon1, lat2, lon2 float64) float64 {
 }
 
 // Procurar devolve até limite lugares. lat/lon (opcionais) puxam para perto.
-func (b *Busca) Procurar(texto string, lat, lon float64, temCentro bool, limite int) ([]Lugar, error) {
+func (b *Busca) Procurar(ctx context.Context, texto string, lat, lon float64, temCentro bool, limite int) ([]Lugar, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	db := b.abrir()
 	if db == nil {
 		return nil, os.ErrNotExist
@@ -92,7 +96,7 @@ func (b *Busca) Procurar(texto string, lat, lon float64, temCentro bool, limite 
 	if q == "" {
 		return nil, nil
 	}
-	rows, err := db.Query(`SELECT l.nome, l.detalhe, l.tipo, l.lat, l.lon, l.peso, bm25(lugares_fts, 8.0, 1.0)
+	rows, err := db.QueryContext(ctx, `SELECT l.nome, l.detalhe, l.tipo, l.lat, l.lon, l.peso, bm25(lugares_fts, 8.0, 1.0)
 		FROM lugares_fts JOIN lugares l ON l.id = lugares_fts.rowid
 		WHERE lugares_fts MATCH ? ORDER BY rank LIMIT 600`, q)
 	if err != nil {
@@ -121,11 +125,17 @@ func (b *Busca) Procurar(texto string, lat, lon float64, temCentro bool, limite 
 		l.nota = nota
 		lista = append(lista, l)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	sort.SliceStable(lista, func(i, j int) bool { return lista[i].nota > lista[j].nota })
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if len(lista) > limite {
 		lista = lista[:limite]
 	}
-	return lista, rows.Err()
+	return lista, nil
 }
 
 func (b *Busca) handler(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +148,10 @@ func (b *Busca) handler(w http.ResponseWriter, r *http.Request) {
 	}
 	lat, e1 := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
 	lon, e2 := strconv.ParseFloat(r.URL.Query().Get("lon"), 64)
-	lista, err := b.Procurar(texto, lat, lon, e1 == nil && e2 == nil, 12)
+	lista, err := b.Procurar(r.Context(), texto, lat, lon, e1 == nil && e2 == nil, 12)
+	if r.Context().Err() != nil {
+		return
+	}
 	if os.IsNotExist(err) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"erro":"Índice de busca ainda não instalado."}`))
