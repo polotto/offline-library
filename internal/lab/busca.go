@@ -4,10 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
 	"math/rand/v2"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -53,6 +56,22 @@ type indiceBusca struct {
 	// fama é o bônus de ruas com muitos endereços na mesma cidade
 	// (Avenida Paulista em São Paulo, Rua XV em Curitiba), por id.
 	fama map[int64]float64
+	// cidades: peso de cada cidade ou vila pelo nome (" curitiba ").
+	cidades map[string]float64
+}
+
+// cidadesDe junta o maior peso de cada nome de cidade ou vila.
+func cidadesDe(fortes []lugarForte) map[string]float64 {
+	m := map[string]float64{}
+	for i := range fortes {
+		f := &fortes[i]
+		if f.Tipo == "Cidade" || f.Tipo == "Vila" {
+			if f.peso > m[f.txt.nome] {
+				m[f.txt.nome] = f.peso
+			}
+		}
+	}
+	return m
 }
 
 // baldesDe monta os baldes de duas letras dos lugares fortes.
@@ -236,12 +255,24 @@ func (b *Busca) carregar(ctx context.Context, db *sql.DB) {
 	novo := *est
 	novo.fortes = fortes
 	novo.baldes = baldesDe(fortes)
+	novo.cidades = cidadesDe(fortes)
 	b.publicar(db, &novo)
 
-	// Segunda volta, mais demorada: ruas famosas.
-	famosas, fama, err := ruasFamosas(ctx, db)
+	// Segunda volta, mais demorada (3 min no Lab 0): ruas famosas. O
+	// resultado fica num arquivo ao lado do índice, com o tamanho e a
+	// data dele; na próxima abertura basta ler o arquivo.
+	arqFama := b.caminho + ".famosas"
+	st, err := os.Stat(b.caminho)
 	if err != nil {
 		return
+	}
+	famosas, fama, err := lerFamosas(ctx, db, arqFama, st)
+	if err != nil {
+		famosas, fama, err = ruasFamosas(ctx, db)
+		if err != nil {
+			return
+		}
+		_ = gravarFamosas(arqFama, st, famosas, fama)
 	}
 	for i := range famosas {
 		f := &famosas[i]
@@ -254,6 +285,98 @@ func (b *Busca) carregar(ctx context.Context, db *sql.DB) {
 	final.baldes = baldesDe(final.fortes)
 	final.fama = fama
 	b.publicar(db, &final)
+}
+
+// cabecalhoFamosas liga o arquivo de ruas famosas a uma versão do índice.
+func cabecalhoFamosas(st os.FileInfo) string {
+	return fmt.Sprintf("famosas 1 %d %d", st.Size(), st.ModTime().UnixNano())
+}
+
+// gravarFamosas escreve "id bônus emMemória" por linha. Grava num
+// arquivo temporário e troca, para nunca deixar arquivo pela metade.
+func gravarFamosas(caminho string, st os.FileInfo, famosas []lugarForte, fama map[int64]float64) error {
+	emMemoria := map[int64]bool{}
+	for i := range famosas {
+		emMemoria[famosas[i].id] = true
+	}
+	ids := make([]int64, 0, len(fama))
+	for id := range fama {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	var sb strings.Builder
+	sb.WriteString(cabecalhoFamosas(st) + "\n")
+	for _, id := range ids {
+		m := 0
+		if emMemoria[id] {
+			m = 1
+		}
+		fmt.Fprintf(&sb, "%d %.4f %d\n", id, fama[id], m)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(caminho), filepath.Base(caminho)+".*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	_, escrita := tmp.WriteString(sb.String())
+	if err := errors.Join(escrita, tmp.Close()); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), caminho)
+}
+
+// lerFamosas lê o arquivo de ruas famosas, se for da mesma versão do
+// índice, e busca no banco as linhas que ficam em memória.
+func lerFamosas(ctx context.Context, db *sql.DB, caminho string, st os.FileInfo) ([]lugarForte, map[int64]float64, error) {
+	dados, err := os.ReadFile(caminho)
+	if err != nil {
+		return nil, nil, err
+	}
+	linhas := strings.Split(strings.TrimSpace(string(dados)), "\n")
+	if len(linhas) == 0 || linhas[0] != cabecalhoFamosas(st) {
+		return nil, nil, errors.New("arquivo de ruas famosas de outra versão")
+	}
+	fama := map[int64]float64{}
+	var memoria []int64
+	for _, ln := range linhas[1:] {
+		var id int64
+		var f float64
+		var m int
+		if _, err := fmt.Sscan(ln, &id, &f, &m); err != nil {
+			return nil, nil, err
+		}
+		fama[id] = f
+		if m == 1 {
+			memoria = append(memoria, id)
+		}
+	}
+	var famosas []lugarForte
+	for ini := 0; ini < len(memoria); ini += 500 {
+		lote := memoria[ini:min(ini+500, len(memoria))]
+		args := make([]any, len(lote))
+		for i, id := range lote {
+			args[i] = id
+		}
+		q := `SELECT id, nome, detalhe, tipo, lat, lon, peso FROM lugares WHERE id IN (?` + strings.Repeat(",?", len(lote)-1) + `)`
+		rows, err := db.QueryContext(ctx, q, args...)
+		if err != nil {
+			return nil, nil, err
+		}
+		for rows.Next() {
+			var f lugarForte
+			if err := rows.Scan(&f.id, &f.Nome, &f.Detalhe, &f.Tipo, &f.Lat, &f.Lon, &f.peso); err != nil {
+				rows.Close()
+				return nil, nil, err
+			}
+			f.txt = prepararTexto(&f.Lugar)
+			famosas = append(famosas, f)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, nil, err
+		}
+	}
+	return famosas, fama, nil
 }
 
 // Uma rua é famosa com pelo menos minEnderecosFama endereços na mesma
@@ -414,6 +537,7 @@ type Lugar struct {
 	Lon     float64 `json:"lon"`
 	peso    float64
 	nota    float64
+	id      int64
 }
 
 func distanciaKm(lat1, lon1, lat2, lon2 float64) float64 {
@@ -450,6 +574,7 @@ type termo struct {
 	prefixo bool
 	extenso string // forma por extenso da abreviação, se houver
 	outro   string // outro gênero: "rodoviaria" acha "rodoviario"
+	numero  bool   // só algarismos: "1000"
 }
 
 type consulta struct {
@@ -457,12 +582,35 @@ type consulta struct {
 	termos []termo // sem palavras vazias
 	// temNumero: algum termo tem algarismo ("Av Paulista 1000").
 	temNumero bool
+	// folga: quantos termos podem faltar (só na busca aproximada).
+	folga int
+	// cidades dá o peso da cidade pelo nome sem acento (" curitiba ").
+	cidades map[string]float64
+	// frases: o texto palavra por palavra (" av paulista 1"), também com
+	// a abreviação por extenso, para o bônus de nome que começa assim.
+	frases []string
+	// letraSolta: o último termo é prefixo de 1 letra.
+	letraSolta termo
 }
 
 func montarConsulta(texto string) consulta {
 	c := consulta{normal: semAcento(texto)}
 	ps := palavras(texto)
-	fimAberto := texto != "" && !unicode.IsSpace(rune(texto[len(texto)-1]))
+	fimAberto := strings.TrimRightFunc(texto, unicode.IsSpace) == texto
+	if len(ps) > 1 && fimAberto && letraSo(ps[len(ps)-1]) {
+		c.letraSolta = termo{texto: ps[len(ps)-1], prefixo: true}
+		ps = ps[:len(ps)-1]
+	}
+	if len(ps) > 0 {
+		fim := ""
+		if !fimAberto {
+			fim = " "
+		}
+		c.frases = []string{" " + strings.Join(ps, " ") + fim}
+		if ext := abreviacoes[ps[0]]; ext != "" && len(ps) > 1 {
+			c.frases = append(c.frases, " "+ext+" "+strings.Join(ps[1:], " ")+fim)
+		}
+	}
 	for i, p := range ps {
 		ultimo := i == len(ps)-1
 		if palavrasVazias[p] && len(ps) > 1 && !ultimo {
@@ -477,6 +625,7 @@ func montarConsulta(texto string) consulta {
 				t.outro = p[:len(p)-1] + "a"
 			}
 		}
+		t.numero = strings.Trim(p, "0123456789") == ""
 		c.termos = append(c.termos, t)
 		if strings.ContainsAny(p, "0123456789") {
 			c.temNumero = true
@@ -492,9 +641,26 @@ func montarConsulta(texto string) consulta {
 // abreviação, também a forma por extenso ("av paulista" e
 // "avenida paulista").
 func (c consulta) prefixos() []string {
-	ps := []string{c.normal}
-	if t := c.termos[0]; t.extenso != "" && strings.HasPrefix(c.normal, t.texto+" ") {
-		ps = append(ps, t.extenso+strings.TrimPrefix(c.normal, t.texto))
+	base := c.normal
+	if c.letraSolta.texto != "" {
+		// "rua xv de novembro c" lê a faixa de "rua xv de novembro"; a
+		// letra filtra depois, na nota.
+		if i := strings.LastIndex(base, " "); i > 0 {
+			base = strings.TrimSpace(base[:i])
+		}
+	}
+	ps := []string{base}
+	if t := c.termos[0]; t.extenso != "" && strings.HasPrefix(base, t.texto+" ") {
+		ps = append(ps, t.extenso+strings.TrimPrefix(base, t.texto))
+	}
+	// Número no fim vira número da casa: "av paulista 1" também procura
+	// "avenida paulista, 1", que é como o endereço está gravado.
+	if ult := c.termos[len(c.termos)-1]; ult.numero && len(c.termos) > 1 {
+		for _, p := range ps[:len(ps):len(ps)] {
+			if i := strings.LastIndex(p, " "+ult.texto); i > 0 && i+1+len(ult.texto) == len(p) {
+				ps = append(ps, p[:i]+", "+ult.texto)
+			}
+		}
 	}
 	return ps
 }
@@ -523,6 +689,35 @@ func (c consulta) fts() string {
 		partes = append(partes, p)
 	}
 	return strings.Join(partes, " AND ")
+}
+
+// juntoCom diz se t e o termo seguinte u aparecem em sequência no nome,
+// com no máximo uma palavra vazia no meio ("xv de novembro").
+func (t termo) juntoCom(u termo, nome string) bool {
+	fim := " "
+	if u.prefixo {
+		fim = ""
+	}
+	for _, a := range []string{t.texto, t.extenso, t.outro} {
+		// Corte barato: a palavra precisa estar no nome.
+		if a == "" || !strings.Contains(nome, " "+a+" ") {
+			continue
+		}
+		for _, b := range []string{u.texto, u.extenso, u.outro} {
+			if b == "" || !strings.Contains(nome, " "+b) {
+				continue
+			}
+			if strings.Contains(nome, " "+a+" "+b+fim) {
+				return true
+			}
+			for v := range palavrasVazias {
+				if strings.Contains(nome, " "+a+" "+v+" "+b+fim) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // achar diz se o termo aparece em normal (" palavra palavra ").
@@ -609,6 +804,11 @@ func semAcentoRapido(s string) string {
 func (c consulta) nota(l *Lugar, x *textoLugar, lat, lon float64, temCentro bool) (float64, bool) {
 	nome, tipo, bairro, cidade := x.nome, x.tipo, x.bairro, x.cidade
 	n := l.peso
+	faltas := 0
+	letra := c.letraSolta
+	if letra.texto != "" && !letra.achar(nome) && !letra.achar(bairro) && !letra.achar(cidade) {
+		return 0, false
+	}
 	for i, t := range c.termos {
 		achou := false
 		// Prefixo curto ("p") no tipo casaria "principal" em toda avenida.
@@ -618,33 +818,70 @@ func (c consulta) nota(l *Lugar, x *textoLugar, lat, lon float64, temCentro bool
 		}
 		switch {
 		case t.achar(nome):
-			n += 3
+			switch {
+			case !t.numero:
+				n += 3
+			case nomeComNumero(l.Nome):
+				n += 3 // número da casa
+			default:
+				n += 1 // "1" casando "13 de Maio" vale pouco
+			}
 			if i == 0 && (strings.HasPrefix(nome, " "+t.texto) || (t.extenso != "" && strings.HasPrefix(nome, " "+t.extenso+" "))) {
 				n += 3
 			}
 		case t.achar(cidade):
+			// Cidade grande pesa mais: "Flor" puxa Florianópolis antes
+			// de Floraí e Florínea.
 			n += 3
+			// Só quando o termo abre o nome da cidade: "paulista" não
+			// puxa Bragança Paulista.
+			if strings.HasPrefix(cidade, " "+t.texto) {
+				n += max(0, (c.cidades[cidade]-5)*2)
+			}
 		case t.achar(bairro):
 			n += 1
+		case achou:
+		case t.numero:
+			n -= 8 // número que não casa não descarta a rua, mas pesa
 		default:
-			if !achou {
+			faltas++
+			if faltas > c.folga {
 				return 0, false
+			}
+			// Na busca aproximada, faltar a cidade pedida custa o dobro:
+			// melhor outro estádio em Montevidéu que o Centenário de
+			// outra cidade.
+			if c.cidades[" "+t.texto+" "] > 0 {
+				n -= 12
+			} else {
+				n -= 6
 			}
 		}
 	}
-	// Bônus para o nome que começa pelo texto todo. Só calcula o nome
-	// sem acento quando o primeiro termo já abre o nome.
-	if t := c.termos[0]; strings.HasPrefix(nome, " "+t.texto) || (t.extenso != "" && strings.HasPrefix(nome, " "+t.extenso)) {
-		nn := semAcentoRapido(l.Nome)
-		for _, p := range c.prefixos() {
-			if nn == p {
-				n += 6
-				break
-			} else if strings.HasPrefix(nn, p) {
-				n += 3
-				break
-			}
+	// Bônus para o nome que começa pelo texto todo, palavra por palavra
+	// (a vírgula de "Avenida Paulista, 1000" não atrapalha).
+	for _, p := range c.frases {
+		if nome == strings.TrimRight(p, " ")+" " {
+			n += 6
+			break
+		} else if strings.HasPrefix(nome, p) {
+			n += 3
+			break
 		}
+	}
+	// Termos vizinhos que aparecem juntos no nome ("avenida paulista")
+	// valem mais que palavras soltas em outro lugar.
+	for i := 1; i < len(c.termos); i++ {
+		if c.termos[i-1].juntoCom(c.termos[i], nome) {
+			n += 2
+		}
+	}
+	// Nome inteiro coberto pela consulta: "Obelisco" vence "Obelisco City".
+	if c.cobreNome(nome) {
+		n += 4
+	}
+	if tiposTuristicos[l.Tipo] {
+		n += 1.5
 	}
 	// Sem número na consulta, a rua vem antes dos endereços numerados
 	// ("Rua X, 35") e dos pontos com nome de endereço (uma rodoviária
@@ -656,6 +893,45 @@ func (c consulta) nota(l *Lugar, x *textoLugar, lat, lon float64, temCentro bool
 		n -= 2.2 * math.Log2(1+distanciaKm(lat, lon, l.Lat, l.Lon))
 	}
 	return n, true
+}
+
+// Lugares que a pessoa procura pelo nome próprio. Ganham de comércio com
+// nome parecido.
+var tiposTuristicos = map[string]bool{
+	"Atração": true, "Monumento": true, "Memorial": true, "Museu": true, "Mirante": true,
+	"Estádio": true, "Teatro": true, "Ruínas": true, "Castelo": true, "Aeroporto": true,
+}
+
+// cobreNome diz se toda palavra do nome (fora as vazias) casa com algum
+// termo da consulta.
+func (c consulta) cobreNome(nome string) bool {
+	ws := strings.Fields(nome)
+	if len(ws) == 0 {
+		return false
+	}
+	for _, w := range ws {
+		if palavrasVazias[w] {
+			continue
+		}
+		ok := false
+		for _, t := range c.termos {
+			// Prefixo não vale aqui: "Flor" não cobre "Florínea".
+			if w == t.texto || w == t.extenso || w == t.outro {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// letraSo diz se p é uma letra só (não algarismo).
+func letraSo(p string) bool {
+	r := []rune(p)
+	return len(r) == 1 && unicode.IsLetter(r[0])
 }
 
 // nomeComNumero diz se o nome tem ", " seguido de número: "Rua X, 35".
@@ -695,6 +971,7 @@ func (b *Busca) Procurar(ctx context.Context, texto string, lat, lon float64, te
 	if est == nil {
 		est = &indiceBusca{}
 	}
+	c.cidades = est.cidades
 
 	// O orçamento conta desde a chegada do pedido. As fontes rodam em
 	// paralelo, cada uma na sua conexão, e somam no mesmo mapa.
@@ -717,6 +994,7 @@ func (b *Busca) Procurar(ctx context.Context, texto string, lat, lon float64, te
 			return
 		}
 		l.nota = n + est.fama[id]
+		l.id = id
 		mu.Lock()
 		if !fechado {
 			if velho, ja := achados[id]; !ja || velho.nota < l.nota {
@@ -833,17 +1111,80 @@ func (b *Busca) Procurar(ctx context.Context, texto string, lat, lon float64, te
 	parc := parcial
 	mu.Unlock()
 
+	// Nada com todos os termos: tenta na memória com um termo a menos
+	// ("Estadio Centenario Montevideo" sem o Centenário no índice traz
+	// os estádios de Montevidéu).
+	var aproximacaoInterrompida bool
+	if len(lista) == 0 && len(c.termos) > 1 {
+		actx, cancelar := context.WithDeadline(ctx, inicio.Add(220*time.Millisecond))
+		lista = aproximar(actx, c, est, lat, lon, temCentro)
+		aproximacaoInterrompida = actx.Err() != nil
+		cancelar()
+		if len(lista) > 0 || aproximacaoInterrompida {
+			parc = true
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	ordenar(lista)
+	lista = juntarRepetidos(lista, limite)
+	if tctx.Err() == nil && !aproximacaoInterrompida {
+		b.guardar(chave, respostaBusca{lista, parc})
+	}
+	return lista, parc, nil
+}
+
+// ordenar põe a nota maior antes; empate fica pelo id, sempre igual.
+func ordenar(lista []Lugar) {
 	sort.Slice(lista, func(i, j int) bool {
 		if lista[i].nota != lista[j].nota {
 			return lista[i].nota > lista[j].nota
 		}
-		return lista[i].Nome < lista[j].Nome
+		return lista[i].id < lista[j].id // desempate fixo: mesma ordem sempre
 	})
-	lista = juntarRepetidos(lista, limite)
-	if tctx.Err() == nil {
-		b.guardar(chave, respostaBusca{lista, parc})
+}
+
+// aproximar procura nos lugares em memória deixando faltar 1 termo,
+// depois 2, mantendo pelo menos dois termos em consultas mais longas.
+func aproximar(ctx context.Context, c consulta, est *indiceBusca, lat, lon float64, temCentro bool) []Lugar {
+	vistos := map[int32]bool{}
+	var cand []int32
+	for _, t := range c.termos {
+		for _, w := range []string{t.texto, t.extenso, t.outro} {
+			if len(w) < 2 {
+				continue
+			}
+			for i, k := range est.baldes[w[:2]] {
+				if i%256 == 0 && ctx.Err() != nil {
+					return nil
+				}
+				if !vistos[k] {
+					vistos[k] = true
+					cand = append(cand, k)
+				}
+			}
+		}
 	}
-	return lista, parc, nil
+	limite := min(2, max(1, len(c.termos)-2))
+	for c.folga = 1; c.folga <= limite; c.folga++ {
+		var lista []Lugar
+		for i, k := range cand {
+			if i%256 == 0 && ctx.Err() != nil {
+				return nil
+			}
+			f := &est.fortes[k]
+			if n, ok := c.nota(&f.Lugar, &f.txt, lat, lon, temCentro); ok {
+				l := f.Lugar
+				l.nota, l.id = n+est.fama[f.id], f.id
+				lista = append(lista, l)
+			}
+		}
+		if len(lista) > 0 {
+			return lista
+		}
+	}
+	return nil
 }
 
 // juntarRepetidos tira o mesmo lugar que aparece mais de uma vez: um rua

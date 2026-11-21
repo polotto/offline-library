@@ -37,6 +37,11 @@ func indiceTeste(t *testing.T, extra int) string {
 		{"Florianópolis", "Cidade", "", -27.59, -48.55, 9},
 		{"Russas", "Cidade", "", -4.94, -37.97, 7},
 		{"Rua Ruy Barbosa", "Rua", "Centro, Curitiba", -25.44, -49.27, 2},
+		{"Estadio da Ressacada", "Estádio", "Carianos, Florianópolis", -27.66, -48.54, 3},
+		{"Obelisco", "Atração", "San Nicolás, Buenos Aires", -34.6, -58.38, 1.5},
+		{"Obelisco City", "Restaurante", "San Nicolás, Buenos Aires", -34.6, -58.38, 1.5},
+		{"Rodoviária de Florínea", "Rodoviária", "Florínea", -22.9, -50.7, 3},
+		{"Florínea", "Cidade", "", -22.9, -50.7, 7},
 	}
 	for i := range extra {
 		linhas = append(linhas, linha{fmt.Sprintf("Rua %d", i), "Rua", "Bairro, Cidade", -10, -50, 2})
@@ -104,7 +109,7 @@ func TestMontarConsulta(t *testing.T) {
 		"Rua XV de Novembro Curitiba": `"rua" AND "xv" AND "novembro" AND "curitiba"*`,
 		"Av Paulista 1000":            `("av" OR "avenida") AND "paulista" AND "1000"*`,
 		"Rodoviária de Florianópolis": `"rodoviaria" AND "florianopolis"*`,
-		"Rua XV d":                    `"rua" AND "xv"`,
+		"Rua XV d":                    `"rua" AND "xv"*`,
 		"Rua XV de":                   `"rua" AND "xv" AND "de"*`,
 		"av":                          `"av"*`,
 		"Rua ":                        `"rua"`,
@@ -139,6 +144,9 @@ func TestProcurarRelevancia(t *testing.T) {
 		{"Rodoviária de Florianópolis", longe, "Terminal Rodoviário Rita Maria", "Florianópolis"},
 		{"Curitiba", longe, "Curitiba", ""},
 		{"Ru", curitiba, "", "Curitiba"},
+		{"Obelisco Buenos Aires", curitiba, "Obelisco", "Buenos Aires"},
+		{"Rodoviária de Flor", curitiba, "Terminal Rodoviário Rita Maria", "Florianópolis"},
+		{"Estadio Centenario Florianopolis", curitiba, "Estadio da Ressacada", "Florianópolis"},
 		{"Rua XV de Novembro Curitiba", [2]float64{-25.43, -49.2701}, "Rua XV de Novembro", "Curitiba"},
 		{"Rua XV de Novembro 100", curitiba, "Rua XV de Novembro, 100", "Curitiba"},
 		{"r xv", curitiba, "Rua XV de Novembro", "Curitiba"},
@@ -155,6 +163,76 @@ func TestProcurarRelevancia(t *testing.T) {
 		if (c.nome != "" && lista[0].Nome != c.nome) || !strings.Contains(lista[0].Detalhe, c.detalhe) {
 			t.Errorf("%q %v: primeiro = %s (%s), quer %s (%s)", c.texto, c.centro, lista[0].Nome, lista[0].Detalhe, c.nome, c.detalhe)
 		}
+	}
+}
+
+func TestLetraSoltaNaoMudaOrdem(t *testing.T) {
+	b := buscaPronta(t, indiceTeste(t, 0))
+	sem, _, _ := b.Procurar(context.Background(), "Rua XV de Novembro", -20, -59, true, 12)
+	com, _, _ := b.Procurar(context.Background(), "Rua XV de Novembro C", -20, -59, true, 12)
+	// Com "C", fica só quem tem palavra com C, na mesma ordem de antes.
+	var filtrada []string
+	for _, l := range sem {
+		if strings.Contains(" "+strings.ToLower(semAcento(l.Nome+" "+l.Detalhe)), " c") {
+			filtrada = append(filtrada, l.Nome+l.Detalhe)
+		}
+	}
+	var got []string
+	for _, l := range com {
+		got = append(got, l.Nome+l.Detalhe)
+	}
+	if strings.Join(got, "|") != strings.Join(filtrada, "|") {
+		t.Fatalf("com C = %v\nquer %v", got, filtrada)
+	}
+}
+
+func TestOrdemFixaNoEmpate(t *testing.T) {
+	lista := []Lugar{{Nome: "B", id: 3}, {Nome: "A", id: 2}, {Nome: "C", id: 1}}
+	ordenar(lista)
+	if lista[0].id != 1 || lista[1].id != 2 || lista[2].id != 3 {
+		t.Fatalf("ordem = %v", lista)
+	}
+}
+
+func TestLetraSoltaPreservaFaixaDeNumero(t *testing.T) {
+	base := montarConsulta("Av Paulista 10")
+	filtrada := montarConsulta("Av Paulista 10 B")
+	if filtrada.fts() != base.fts() || strings.Join(filtrada.prefixos(), "|") != strings.Join(base.prefixos(), "|") {
+		t.Fatalf("as fontes mudaram com a letra solta: %s %v", filtrada.fts(), filtrada.prefixos())
+	}
+	lugar := Lugar{Nome: "Avenida Paulista, 1079", Detalhe: "Endereço · Bela Vista, São Paulo"}
+	detalhe := prepararTexto(&lugar)
+	nota, ok := base.nota(&lugar, &detalhe, 0, 0, false)
+	if got, aceito := filtrada.nota(&lugar, &detalhe, 0, 0, false); !ok || !aceito || got != nota {
+		t.Fatalf("nota com letra = %v (%v), sem letra = %v (%v)", got, aceito, nota, ok)
+	}
+}
+
+func TestArquivoRuasFamosas(t *testing.T) {
+	caminho := indiceTeste(t, 0)
+	db, err := abrirSQLite(caminho, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	st, _ := os.Stat(caminho)
+	var f lugarForte
+	if err := db.QueryRow(`SELECT id, nome FROM lugares WHERE nome = 'Avenida Paulista' LIMIT 1`).Scan(&f.id, &f.Nome); err != nil {
+		t.Fatal(err)
+	}
+	arq := caminho + ".famosas"
+	if err := gravarFamosas(arq, st, []lugarForte{f}, map[int64]float64{f.id: 5.5, 999: 2}); err != nil {
+		t.Fatal(err)
+	}
+	famosas, fama, err := lerFamosas(context.Background(), db, arq, st)
+	if err != nil || len(famosas) != 1 || famosas[0].Nome != "Avenida Paulista" || fama[999] != 2 || fama[f.id] != 5.5 {
+		t.Fatalf("famosas=%v fama=%v err=%v", famosas, fama, err)
+	}
+	// Índice trocado: o arquivo velho não vale.
+	os.Chtimes(caminho, time.Now(), time.Now().Add(time.Hour))
+	st2, _ := os.Stat(caminho)
+	if _, _, err := lerFamosas(context.Background(), db, arq, st2); err == nil {
+		t.Fatal("arquivo de outra versão foi aceito")
 	}
 }
 
