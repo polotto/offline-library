@@ -56,7 +56,10 @@ label{display:block;font-weight:600;margin:14px 0 4px}.ajuda{font-size:14px;colo
 {{if .Assunto}}<dt>Assunto</dt><dd>{{.Assunto}}</dd>{{end}}{{if .Tipo}}<dt>Tipo</dt><dd>{{.Tipo}}</dd>{{end}}
 {{if .Descricao}}<dt>Descrição</dt><dd style="white-space:pre-line">{{.Descricao}}</dd>{{end}}</dl>
 {{if .Tags}}<ul class="tags">{{range .Tags}}<li><a href="/catalogo/?tag={{query .}}">{{.}}</a></li>{{end}}</ul>{{end}}
-{{if .Arquivos}}<h3>Arquivos</h3><ul class="arquivos">{{range .Arquivos}}<li><a href="/catalogo/arquivo/{{.ID}}">{{.Nome}}</a><span class="meta">{{.TamanhoLegivel}}</span></li>{{end}}</ul>{{end}}
+{{if .Arquivos}}<h3>Arquivos</h3><ul class="arquivos">{{range .Arquivos}}<li><span id="arquivo-{{.ID}}">{{if .FormatoLeitor}}{{.Nome}}{{else}}<a href="/catalogo/arquivo/{{.ID}}">{{.Nome}}</a>{{end}}
+<span class="meta">({{.TamanhoLegivel}})</span></span>
+{{if .FormatoLeitor}}<a class="botao forte" aria-describedby="arquivo-{{.ID}}" href="/catalogo/ler/{{.ID}}">Ler {{.FormatoLeitor}}</a>{{end}}
+<a class="botao" href="/catalogo/arquivo/{{.ID}}?baixar=1" aria-label="Baixar {{.Nome}}">Baixar</a></li>{{end}}</ul>{{end}}
 </article>
 {{if $.Usuario}}<div class="acoes"><a class="botao" href="/catalogo/item/{{.ID}}/editar">Editar</a>
 <form method="post" action="/catalogo/item/{{.ID}}/apagar" onsubmit="return confirm('Apagar este item e seus arquivos?')"><button class="perigo">Apagar</button></form></div>{{end}}
