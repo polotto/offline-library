@@ -108,6 +108,14 @@ Entram ruas, cidades e bairros, pontos com nome (farmácia, escola,
 hospital...) e endereços com número. A busca não diferencia acentos e
 aceita o começo das palavras.
 
+## Enciclopédia e dicionários
+
+Em `/wiki/`, escolha uma coleção e pesquise no acervo local. O site abre
+artigos e verbetes em uma página de leitura com sumário e tabelas que
+rolam dentro da página. O Kiwix lê os arquivos ZIM (pacotes de páginas
+offline) e consulta seus índices. Os artigos e a busca funcionam sem
+internet enquanto o servidor local estiver disponível.
+
 ## Migrar do Omeka Classic
 
 ```sh

@@ -69,7 +69,7 @@ func (s *Servidor) Rotas() http.Handler {
 	m.HandleFunc("GET /mapas/rotas", s.proxyRotas)
 	m.HandleFunc("GET /mapas/busca", s.busca.handler)
 	m.HandleFunc("GET /mapas/", s.mapas) // GET também atende HEAD
-	m.Handle("/wiki/", s.proxyKiwix())
+	s.registrarEnciclopedia(m)
 	m.HandleFunc("GET /wiki", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/wiki/", http.StatusMovedPermanently)
 	})
@@ -204,7 +204,13 @@ func (s *Servidor) proxyKiwix() http.Handler {
 			u, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", s.kiwix.Porta))
 			pr.SetURL(u)
 			pr.Out.Host = pr.In.Host
+			if adaptarWiki(pr.In) {
+				pr.Out.Header.Del("Accept-Encoding")
+				pr.Out.Header.Del("If-None-Match")
+				pr.Out.Header.Del("If-Modified-Since")
+			}
 		},
+		ModifyResponse: respostaWiki,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Enciclopédia indisponível no momento.", http.StatusBadGateway)
 		},
