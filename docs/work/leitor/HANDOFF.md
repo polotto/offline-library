@@ -1,6 +1,7 @@
 # Leitor e apontamentos
 
-Estado: implementação local verificada, aguardando integração. A ficha dá acesso ao leitor e ao
+Estado: implementação local verificada e publicada no [pedido de
+integração 2](https://github.com/polotto/offline-library/pull/2). A ficha dá acesso ao leitor e ao
 download. O leitor usa dependências embutidas e a sessão do catálogo. Cada
 apontamento pertence à conta e ao anexo e guarda a página do documento ou
 a posição canônica no livro. O banco existente ganha uma tabela na abertura.
@@ -40,3 +41,7 @@ abertura sem apagar o cadastro.
 O navegador abriu o livro também com a resposta do sumário atrasada em
 600 milissegundos. O catálogo reabriu com cinco registros do acervo de
 teste após a criação da tabela de apontamentos em uma cópia sem a tabela.
+
+Os mapas de caracteres foram empacotados com a licença para que a
+verificação do GitHub possa examinar a lista completa de arquivos. A rota
+continua entregando cada mapa pelo nome original.

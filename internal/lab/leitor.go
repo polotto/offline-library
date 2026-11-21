@@ -1,11 +1,15 @@
 package lab
 
 import (
+	"archive/zip"
+	"bytes"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/polotto/offline-library/web"
@@ -24,8 +28,32 @@ func (a Arquivo) FormatoLeitor() string {
 
 func (c *Catalogo) registrarLeitor(m *http.ServeMux) {
 	m.Handle("GET /catalogo/leitor/", http.FileServerFS(web.Arquivos))
+	m.HandleFunc("GET /catalogo/leitor/vendor/cmaps/{nome}", servirMapasDeCaracteres())
 	m.HandleFunc("GET /catalogo/ler/{id}", c.ler)
 	m.HandleFunc("POST /catalogo/ler/{id}", c.exigir(c.salvarApontamento))
+}
+
+// Os mapas de caracteres mantêm seus nomes originais dentro do arquivo
+// embutido. Cada requisição descompacta somente o mapa solicitado.
+func servirMapasDeCaracteres() http.HandlerFunc {
+	dados, err := web.Arquivos.ReadFile("catalogo/leitor/vendor/cmaps.zip")
+	var mapas *zip.Reader
+	if err == nil {
+		mapas, err = zip.NewReader(bytes.NewReader(dados), int64(len(dados)))
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err != nil {
+			http.Error(w, "Mapas de caracteres indisponíveis.", http.StatusInternalServerError)
+			return
+		}
+		nome := r.PathValue("nome")
+		mapa, err := fs.ReadFile(mapas, nome)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeContent(w, r, nome, time.Time{}, bytes.NewReader(mapa))
+	}
 }
 
 type apontamento struct {

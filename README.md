@@ -147,4 +147,5 @@ e conteúdo da Wikipédia (CC BY-SA).
 
 O leitor inclui PDF.js 5.7.284 (Apache 2.0), EPUB.js 0.3.93 (BSD-2) e
 JSZip 3.10.2 (MIT ou GPLv3). Os termos e avisos dos arquivos distribuídos
-estão em `web/catalogo/leitor/vendor/`.
+estão em `web/catalogo/leitor/vendor/`. O arquivo `cmaps.zip` inclui
+os mapas de caracteres do PDF.js e a licença original.
