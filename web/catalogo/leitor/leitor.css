@@ -1,0 +1,18 @@
+.titulo-leitor { overflow-wrap: anywhere; font: 26px Georgia, serif; }
+.grade-leitor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(245px, 300px); gap: 18px; align-items: start; }
+.controles-leitor { margin-bottom: 8px; }
+.estado-leitor { justify-content: space-between; font-size: 15px; }
+.controles-leitor :is(input, select) { width: auto; max-width: 100%; }
+#pagina { width: 5rem; }
+#sumario { max-width: 13rem; }
+#documento { background: var(--cartao); border: 1px solid var(--borda); overflow: auto; margin-top: 8px; }
+#documento canvas { display: block; margin: 0 auto; }
+[data-formato="EPUB"] #documento { height: max(300px, 62vh); }
+#apontamentos { min-width: 0; }
+.nota-leitor { border-top: 1px solid var(--borda); margin-top: 16px; padding-top: 10px; }
+.nota-leitor p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 8px; }
+.nota-leitor details { margin-top: 8px; }
+button:disabled { opacity: .55; cursor: default; }
+@media (max-width: 760px) {
+  .grade-leitor { grid-template-columns: minmax(0, 1fr); }
+}

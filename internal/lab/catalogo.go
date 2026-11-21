@@ -55,6 +55,14 @@ CREATE TABLE IF NOT EXISTS arquivos (
   criado TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS usuarios (nome TEXT PRIMARY KEY, hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS apontamentos (
+  id INTEGER PRIMARY KEY,
+  arquivo_id INTEGER NOT NULL REFERENCES arquivos(id) ON DELETE CASCADE,
+  usuario TEXT NOT NULL REFERENCES usuarios(nome) ON DELETE CASCADE,
+  posicao TEXT NOT NULL,
+  texto TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS apontamentos_arquivo_usuario ON apontamentos(arquivo_id, usuario);
 CREATE VIRTUAL TABLE IF NOT EXISTS itens_fts USING fts5(
   titulo, autores, assunto, descricao, tags,
   tokenize = 'unicode61 remove_diacritics 2');
@@ -148,6 +156,7 @@ func (c *Catalogo) Registrar(m *http.ServeMux) {
 	m.HandleFunc("GET /catalogo/{$}", c.lista)
 	m.HandleFunc("GET /catalogo/item/{id}", c.item)
 	m.HandleFunc("GET /catalogo/arquivo/{id}", c.baixar)
+	c.registrarLeitor(m)
 	m.HandleFunc("GET /catalogo/entrar", c.entrarForm)
 	m.HandleFunc("POST /catalogo/entrar", c.entrar)
 	m.HandleFunc("POST /catalogo/sair", c.sair)
@@ -420,12 +429,21 @@ func (c *Catalogo) item(w http.ResponseWriter, r *http.Request) {
 	c.render(w, r, "item", map[string]any{"Item": i})
 }
 
-func (c *Catalogo) baixar(w http.ResponseWriter, r *http.Request) {
-	var a Arquivo
+func (c *Catalogo) arquivo(r *http.Request) (Arquivo, error) {
+	a := Arquivo{ID: idDe(r)}
 	var publico bool
-	err := c.db.QueryRow(`SELECT a.nome, a.caminho, a.tipo_mime, i.publico FROM arquivos a JOIN itens i ON i.id = a.item_id
-		WHERE a.id = ?`, idDe(r)).Scan(&a.Nome, &a.Caminho, &a.Mime, &publico)
-	if err != nil || (!publico && c.usuario(r) == "") {
+	err := c.db.QueryRow(`SELECT a.item_id, a.nome, a.caminho, a.tipo_mime, i.publico
+		FROM arquivos a JOIN itens i ON i.id = a.item_id WHERE a.id = ?`, a.ID).
+		Scan(&a.ItemID, &a.Nome, &a.Caminho, &a.Mime, &publico)
+	if err == nil && !publico && c.usuario(r) == "" {
+		err = sql.ErrNoRows
+	}
+	return a, err
+}
+
+func (c *Catalogo) baixar(w http.ResponseWriter, r *http.Request) {
+	a, err := c.arquivo(r)
+	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -443,6 +461,9 @@ func (c *Catalogo) baixar(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(a.Mime, "image/") || a.Mime == "application/pdf" || strings.HasPrefix(a.Mime, "audio/") ||
 		strings.HasPrefix(a.Mime, "video/") || strings.HasPrefix(a.Mime, "text/plain") {
 		disp = "inline"
+	}
+	if r.URL.Query().Get("baixar") == "1" {
+		disp = "attachment"
 	}
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disp, map[string]string{"filename": a.Nome}))
 	w.Header().Set("Content-Security-Policy", "sandbox")
