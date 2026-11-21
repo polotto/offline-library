@@ -107,7 +107,7 @@ const instalarBusca = (() => {
   const lista = document.getElementById('busca-lista');
   const limpar = document.getElementById('busca-limpar');
   const aviso = document.getElementById('busca-aviso');
-  const DEMORA = 2500, LIMITE = 20000, MINIMO = 2, VALIDADE_PARCIAL = 60000;
+  const CARREGAMENTO = 160, DEMORA = 2500, LIMITE = 20000, MINIMO = 2, VALIDADE_PARCIAL = 60000;
   const guardados = buscaUtil.cache(80);
   let map = null, rotas = null, pendente = null, marcador = null;
   // base: última resposta mostrada {q, lugares, parcial, n}.
@@ -120,6 +120,34 @@ const instalarBusca = (() => {
   let falha = null; // {q, tipo: 'erro' | 'sem-indice', mensagem}
   let recentes = [];
   try { recentes = JSON.parse(localStorage.getItem('busca-recentes') || '[]').slice(0, 5); } catch (_) {}
+
+  const resumo = document.createElement('div');
+  resumo.id = 'busca-escolha';
+  resumo.hidden = true;
+  resumo.setAttribute('role', 'group');
+  resumo.setAttribute('aria-label', 'Local no mapa');
+  const localEscolhido = document.createElement('div');
+  localEscolhido.className = 'busca-escolha-local';
+  const nomeEscolhido = document.createElement('strong');
+  nomeEscolhido.className = 'busca-escolha-nome';
+  const detalheEscolhido = document.createElement('p');
+  detalheEscolhido.className = 'busca-escolha-detalhe';
+  localEscolhido.append(nomeEscolhido, detalheEscolhido);
+  const acoesEscolhidas = document.createElement('div');
+  acoesEscolhidas.className = 'busca-escolha-acoes';
+  const pontos = [
+    ['Origem A', 'Usar como origem'],
+    ['Destino B', 'Usar como destino'],
+  ];
+  for (const [ponto, [nome, rotulo]] of pontos.entries()) {
+    const acao = botao([nome], rotulo, 'busca-escolha-rota', () => {
+      if (escolhido) ir(escolhido, ponto);
+    });
+    acao.tabIndex = 0;
+    acoesEscolhidas.append(acao);
+  }
+  resumo.append(localEscolhido, acoesEscolhidas);
+  form.append(resumo);
 
   campo.disabled = false;
 
@@ -142,6 +170,7 @@ const instalarBusca = (() => {
     ativo = -1;
     campo.setAttribute('aria-expanded', 'false');
     campo.removeAttribute('aria-activedescendant');
+    resumo.hidden = !escolhido;
   }
 
   function tirarMarcador() {
@@ -150,6 +179,7 @@ const instalarBusca = (() => {
     pendente = null;
     escolhido = null;
     listaDaEscolha = false;
+    resumo.hidden = true;
   }
 
   function ir(l, comoRota) {
@@ -160,12 +190,19 @@ const instalarBusca = (() => {
       const el = document.createElement('div');
       el.className = 'busca-marcador';
       el.title = l.nome;
+      const rotulo = document.createElement('span');
+      rotulo.className = 'busca-marcador-nome';
+      rotulo.setAttribute('aria-hidden', 'true');
+      rotulo.textContent = l.nome;
+      el.append(rotulo);
       marcador = new maplibregl.Marker({element: el, anchor: 'bottom'}).setLngLat(ponto).addTo(map);
       map.flyTo({center: ponto, zoom: buscaUtil.zoomDe(l.tipo), speed: 1.6});
       if (comoRota !== undefined && rotas) rotas.definir(comoRota, {lng: l.lon, lat: l.lat});
     }
     abortar();
     escolhido = {...l};
+    nomeEscolhido.textContent = l.nome;
+    detalheEscolhido.textContent = l.detalhe || l.tipo || '';
     enterPendente = false;
     listaDaEscolha = false;
     campo.value = l.nome;
@@ -256,8 +293,8 @@ const instalarBusca = (() => {
     const q = listaDaEscolha ? base.q : consulta();
     const recente = !listaDaEscolha && modoRecentes();
     const {itens: fonte, velha} = lugaresAgora();
-    achados = fonte;
-    if (ativo >= fonte.length) ativo = -1;
+    achados = velha ? [] : fonte;
+    if (ativo >= achados.length) ativo = -1;
     const itens = [];
     if (recente && fonte.length) itens.push(linhaInfo('busca-titulo', 'Recentes'));
     fonte.forEach((l, i) => {
@@ -265,7 +302,10 @@ const instalarBusca = (() => {
       li.setAttribute('role', 'option');
       li.id = 'busca-op-' + i;
       li.setAttribute('aria-selected', String(i === ativo));
-      if (velha) li.className = 'busca-velha';
+      if (velha) {
+        li.className = 'busca-velha';
+        li.setAttribute('aria-disabled', 'true');
+      }
       const marcado = !!escolhido && l.nome === escolhido.nome && l.lat === escolhido.lat && l.lon === escolhido.lon;
       if (marcado) li.dataset.escolhido = 'true';
       // Linha igual à que já está na tela não é refeita (ver aplicarLinhas).
@@ -279,6 +319,7 @@ const instalarBusca = (() => {
         botao([nome, det], '', 'busca-ir', () => ir(l)),
         botao(rotulo('A', 'Origem'), 'Usar ' + l.nome + ' como origem A (Alt+A)', 'busca-ab', () => ir(l, 0)),
         botao(rotulo('B', 'Destino'), 'Usar ' + l.nome + ' como destino B (Alt+B)', 'busca-ab', () => ir(l, 1)));
+      if (velha) for (const b of li.children) b.disabled = true;
       itens.push(li);
     });
     if (!recente) {
@@ -288,7 +329,9 @@ const instalarBusca = (() => {
           : null;
         itens.push(linhaInfo('busca-erro', falha.mensagem, tentar));
       } else if (voo && performance.now() - voo.inicio > DEMORA) {
-        itens.push(linhaInfo('busca-demora', 'Ainda buscando. O servidor está lento, aguarde.'));
+        itens.push(linhaInfo('busca-demora', 'Ainda buscando…'));
+      } else if (voo && (!fonte.length || velha) && performance.now() - voo.inicio >= CARREGAMENTO) {
+        itens.unshift(linhaInfo('busca-carregando', 'Buscando lugares…'));
       } else if (!voo && base.q === q && !fonte.length && !base.parcial) {
         itens.push(linhaInfo('busca-vazio', 'Nada encontrado para "' + q + '". Tente o nome da rua com a cidade.'));
       } else if (base.q === q && base.parcial && fonte.length) {
@@ -297,6 +340,7 @@ const instalarBusca = (() => {
     }
     aplicarLinhas(itens);
     if (!itens.length) { fechar(); return; }
+    resumo.hidden = true;
     lista.hidden = false;
     campo.setAttribute('aria-expanded', 'true');
     if (ativo >= 0) {
@@ -377,6 +421,12 @@ const instalarBusca = (() => {
     const meu = {q, n, controle, inicio: performance.now()};
     voo = meu;
     atualizarCarregando();
+    const carregando = setTimeout(() => {
+      if (voo === meu && focado() && !achados.length) {
+        anunciar('Buscando lugares.');
+        desenhar();
+      }
+    }, CARREGAMENTO);
     const demora = setTimeout(() => { if (voo === meu && focado()) { anunciar('Ainda buscando.'); desenhar(); } }, DEMORA + 50);
     let porTempo = false;
     const corte = setTimeout(() => { porTempo = true; controle.abort(); }, LIMITE);
@@ -404,6 +454,7 @@ const instalarBusca = (() => {
     } finally {
       clearTimeout(corte);
       clearTimeout(demora);
+      clearTimeout(carregando);
     }
     if (voo !== meu) return;
     voo = null;
@@ -445,6 +496,7 @@ const instalarBusca = (() => {
     listaDaEscolha = false;
     ativo = -1;
     escolhido = null;
+    resumo.hidden = true;
     // Apagar tudo com Backspace limpa como o X.
     if (campo.value === '') tirarMarcador();
     if (falha && falha.q !== consulta()) falha = null;
