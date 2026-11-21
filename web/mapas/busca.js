@@ -63,8 +63,7 @@ const buscaUtil = (() => {
   // - palavra de 5 letras ou mais vale nos dois gêneros ("rodoviaria" acha
   //   "rodoviario");
   // - o tipo conta como palavra; termo de 1 letra não decide nada;
-  // - termo com algarismo não decide: para "Av Paulista 1000" o servidor
-  //   devolve também a rua sem número;
+  // - o número da casa filtra endereços numerados e mantém ruas sem número;
   // - qualquer termo vale como começo de palavra (o servidor exige palavra
   //   inteira nos termos do meio; aqui ser folgado só mantém mais itens).
   const VAZIAS = new Set(['de', 'da', 'do', 'dos', 'das', 'e']);
@@ -73,6 +72,9 @@ const buscaUtil = (() => {
     pres: 'presidente', cel: 'coronel', mal: 'marechal', gen: 'general', sen: 'senador',
     gov: 'governador', sta: 'santa', sto: 'santo', eng: 'engenheiro', dep: 'deputado'};
   function casa(l, consulta) {
+    const numero = consulta.match(/(?:^|\s)(\d+)(?:\s+\p{L})?$/u)?.[1];
+    const numeroDoLugar = l.nome?.match(/,\s*(\d+)$/)?.[1];
+    if (numero && numeroDoLugar && !numeroDoLugar.startsWith(numero)) return false;
     const termos = termosDe(consulta).filter(t => t.length > 1 && !VAZIAS.has(t) && !/\d/.test(t));
     if (!termos.length) return true;
     const palavras = termosDe([l.nome, l.tipo, l.detalhe].filter(Boolean).join(' '));
