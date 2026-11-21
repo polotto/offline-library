@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Enciclopédia e dicionários</title>
   <link rel="stylesheet" href="/wiki/lab/inicio.css">
+  <script defer src="/wiki/lab/busca.js"></script>
 </head>
 <body>
   <main>
@@ -19,6 +20,7 @@
       {{if and .Disponivel .Colecoes}}
       <form action="/wiki/search" method="get" role="search" aria-labelledby="titulo-busca">
         <input type="hidden" name="userlang" value="pt">
+        <input type="hidden" name="leitura" value="1">
         <div class="campo">
           <label for="colecao">Coleção</label>
           <select id="colecao" name="content">
@@ -29,10 +31,11 @@
         </div>
         <div class="campo">
           <label for="consulta">Assunto ou palavra</label>
-          <input id="consulta" type="search" name="pattern" required>
+          <input id="consulta" type="search" name="pattern" autocomplete="off" required>
         </div>
         <button type="submit">Buscar</button>
       </form>
+      <ul id="sugestoes" aria-label="Sugestões do acervo" hidden></ul>
       {{else if .Colecoes}}
       <p>O acervo está indisponível no momento. Tente novamente em instantes.</p>
       {{else}}
@@ -48,7 +51,7 @@
         <ul>
           {{range .Colecoes}}
           <li>
-            <a class="colecao" href="/wiki/content/{{.ID}}" data-colecao="{{.ID}}">
+            <a class="colecao" href="/wiki/content/{{.ID}}?leitura=1" data-colecao="{{.ID}}">
               <span>{{.Titulo}}</span><span aria-hidden="true">→</span>
             </a>
           </li>

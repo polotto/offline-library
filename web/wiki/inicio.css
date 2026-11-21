@@ -178,3 +178,14 @@ button:hover {
     padding-inline: 1.25rem;
   }
 }
+#sugestoes {
+  margin: .7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+#sugestoes a {
+  display: block;
+  padding: .6rem .25rem;
+  border-top: 1px solid #cbd3c5;
+  color: #236645;
+}

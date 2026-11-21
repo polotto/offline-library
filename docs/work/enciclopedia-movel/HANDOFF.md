@@ -18,3 +18,10 @@ seção História no artigo Curitiba. Também abriu saudade em português,
 casa em espanhol e home em inglês. A prévia usa os arquivos reais em
 modo de leitura, com atualização desligada. O visualizador original
 continua disponível em `/wiki/viewer`.
+
+A avaliação independente preferiu a prévia para o artigo e o verbete.
+O visualizador anterior ganhou a primeira rodada de busca pela sugestão
+do título exato. A nova entrada passou a oferecer essas sugestões sem
+abrir a coleção antes. A busca completa mantém a ordem do índice.
+O modo de leitura usa o parâmetro `leitura=1` nos links para preservar
+o visualizador original também na rede local sem conexão criptografada.
