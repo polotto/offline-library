@@ -3,5 +3,5 @@ package web
 
 import "embed"
 
-//go:embed portal mapas catalogo
+//go:embed portal mapas catalogo wiki
 var Arquivos embed.FS

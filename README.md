@@ -119,6 +119,14 @@ página ou o trecho que estava aberto. Abra um apontamento para voltar ao local,
 edite seu texto ou apague-o. Os apontamentos ficam no banco do catálogo e aparecem
 apenas para a conta que os criou.
 
+## Enciclopédia e dicionários
+
+Em `/wiki/`, escolha uma coleção e pesquise no acervo local. O site abre
+artigos e verbetes em uma página de leitura com sumário e tabelas que
+rolam dentro da página. O Kiwix lê os arquivos ZIM (pacotes de páginas
+offline) e consulta seus índices. Os artigos e a busca funcionam sem
+internet enquanto o servidor local estiver disponível.
+
 ## Migrar do Omeka Classic
 
 ```sh

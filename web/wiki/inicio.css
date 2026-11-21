@@ -1,0 +1,180 @@
+:root {
+  color-scheme: light;
+  --fundo: #f3f0e8;
+  --papel: #fffdf7;
+  --texto: #22332c;
+  --texto-suave: #526057;
+  --verde: #205b3e;
+  --verde-escuro: #18472f;
+  --verde-claro: #e2efe5;
+  --borda: #cbd3c5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font: 1rem/1.55 system-ui, sans-serif;
+}
+
+main {
+  width: min(100%, 60rem);
+  margin: auto;
+  padding: clamp(1.25rem, 5vw, 3.25rem) clamp(1rem, 4vw, 2rem) 3rem;
+}
+
+button, input, select {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--verde);
+  outline-offset: 3px;
+}
+
+.cabecalho {
+  margin-bottom: 1.5rem;
+}
+
+.voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  color: var(--verde);
+  font-weight: 650;
+  text-underline-offset: 0.16em;
+}
+
+h1, h2, p {
+  margin: 0;
+}
+
+h1, h2 {
+  font-family: Georgia, serif;
+  font-weight: 400;
+}
+
+h1 {
+  margin: 0.5rem 0;
+  font-size: clamp(2.25rem, 6vw, 3.75rem);
+  line-height: 1.1;
+}
+
+h2 {
+  font-size: 1.625rem;
+  line-height: 1.2;
+}
+
+p {
+  color: var(--texto-suave);
+}
+
+.busca, .grupo {
+  border: 1px solid var(--borda);
+  border-radius: 0.65rem;
+  background: var(--papel);
+  padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.busca {
+  border-top: 3px solid var(--verde);
+}
+
+.busca h2,
+.grupo h2 {
+  margin-bottom: 0.8rem;
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.campo {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+label {
+  font-weight: 650;
+}
+
+input[type="search"], select, button {
+  min-height: 2.75rem;
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.65rem;
+}
+
+input[type="search"], select {
+  width: 100%;
+  border: 1px solid #7c8c80;
+  background: #fff;
+  color: var(--texto);
+}
+
+button {
+  border: 1px solid var(--verde);
+  background: var(--verde);
+  color: #fff;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--verde-escuro);
+}
+
+.grupos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.grupo ul {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.colecao {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  border-radius: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  color: var(--verde);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.colecao:hover, .colecao:focus-visible {
+  background: var(--verde-claro);
+  text-decoration: underline;
+}
+
+.colecao[data-colecao^="wikipedia_pt"], .colecao[data-colecao^="wiktionary_pt"] {
+  background: var(--verde-claro);
+  font-weight: 700;
+}
+
+@media (min-width: 42rem) {
+  form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) auto;
+    align-items: end;
+  }
+
+  button {
+    padding-inline: 1.25rem;
+  }
+}

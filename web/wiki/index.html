@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Enciclopédia e dicionários</title>
+  <link rel="stylesheet" href="/wiki/lab/inicio.css">
+</head>
+<body>
+  <main>
+    <header class="cabecalho">
+      <a class="voltar" href="/"><span aria-hidden="true">←</span> Início</a>
+      <h1>Enciclopédia e dicionários</h1>
+      <p>Consulte artigos e palavras sem internet.</p>
+    </header>
+
+    <section class="busca" aria-labelledby="titulo-busca">
+      <h2 id="titulo-busca">Pesquisar no acervo</h2>
+      {{if and .Disponivel .Colecoes}}
+      <form action="/wiki/search" method="get" role="search" aria-labelledby="titulo-busca">
+        <input type="hidden" name="userlang" value="pt">
+        <div class="campo">
+          <label for="colecao">Coleção</label>
+          <select id="colecao" name="content">
+            {{range .Colecoes}}
+            <option value="{{.ID}}">{{.Titulo}}</option>
+            {{end}}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="consulta">Assunto ou palavra</label>
+          <input id="consulta" type="search" name="pattern" required>
+        </div>
+        <button type="submit">Buscar</button>
+      </form>
+      {{else if .Colecoes}}
+      <p>O acervo está indisponível no momento. Tente novamente em instantes.</p>
+      {{else}}
+      <p>As coleções ficam disponíveis após o download.</p>
+      {{end}}
+    </section>
+
+    {{if .Disponivel}}
+    <div class="grupos">
+      {{range .Grupos}}
+      <section class="grupo">
+        <h2>{{.Titulo}}</h2>
+        <ul>
+          {{range .Colecoes}}
+          <li>
+            <a class="colecao" href="/wiki/content/{{.ID}}" data-colecao="{{.ID}}">
+              <span>{{.Titulo}}</span><span aria-hidden="true">→</span>
+            </a>
+          </li>
+          {{end}}
+        </ul>
+      </section>
+      {{end}}
+    </div>
+    {{end}}
+  </main>
+</body>
+</html>
