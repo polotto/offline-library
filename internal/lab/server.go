@@ -73,8 +73,25 @@ func (s *Servidor) Rotas() http.Handler {
 	m.HandleFunc("GET /wiki", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/wiki/", http.StatusMovedPermanently)
 	})
+	m.HandleFunc("GET /jellyfin", s.redirecionarJellyfin)
+	m.HandleFunc("GET /jellyfin/", s.redirecionarJellyfin)
 	s.catalogo.Registrar(m)
 	return s.filtro(s.registro(m))
+}
+
+func (s *Servidor) redirecionarJellyfin(w http.ResponseWriter, r *http.Request) {
+	host, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		host = r.Host
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	porta := s.cfg.PortaJellyfin
+	if porta <= 0 {
+		porta = 8096
+	}
+	http.Redirect(w, r, "http://"+comPorta(host, porta)+"/", http.StatusFound)
 }
 
 // filtro aceita só a própria máquina e a rede local.
@@ -269,6 +286,23 @@ func Enderecos(porta int) string {
 	}
 	lista = append(lista, comPorta("127.0.0.1", porta))
 	return strings.Join(lista, " e http://")
+}
+
+// enderecoLocal devolve o primeiro endereço IPv4 privado da máquina com a porta.
+func enderecoLocal(porta int) string {
+	ifaces, _ := net.Interfaces()
+	for _, i := range ifaces {
+		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := i.Addrs()
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil && n.IP.IsPrivate() {
+				return "http://" + comPorta(n.IP.String(), porta)
+			}
+		}
+	}
+	return ""
 }
 
 // comPorta junta host e porta e omite a 80, padrão do navegador.

@@ -2,6 +2,10 @@ package lab
 
 import (
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"testing"
 )
 
@@ -25,5 +29,58 @@ func TestPermitidoForaDaRede(t *testing.T) {
 	}
 	if !c.Permitido(net.ParseIP("192.168.0.9")) {
 		t.Error("endereço privado recusado")
+	}
+}
+
+func TestRedirecionarJellyfin(t *testing.T) {
+	s := &Servidor{cfg: &Config{PortaJellyfin: 8096}}
+	casos := map[string]string{
+		"http://lab-0.local/jellyfin":       "http://lab-0.local:8096/",
+		"http://192.168.0.5:8087/jellyfin/": "http://192.168.0.5:8096/",
+	}
+	for origem, esperado := range casos {
+		req := httptest.NewRequest(http.MethodGet, origem, nil)
+		rec := httptest.NewRecorder()
+		s.redirecionarJellyfin(rec, req)
+		if rec.Code != http.StatusFound {
+			t.Fatalf("%s: status = %d, esperado %d", origem, rec.Code, http.StatusFound)
+		}
+		if got := rec.Header().Get("Location"); got != esperado {
+			t.Errorf("%s: Location = %q, esperado %q", origem, got, esperado)
+		}
+	}
+}
+
+func TestEstadoJellyfinDisponivel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/health" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("Healthy"))
+	}))
+	defer srv.Close()
+
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, portaTexto, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	porta, err := strconv.Atoi(portaTexto)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := &Servidor{cfg: &Config{PortaJellyfin: porta}}
+	est := s.estadoJellyfin()
+	if est.Estado != "pronto" {
+		t.Fatalf("estado = %q (%s), esperado pronto", est.Estado, est.Detalhe)
+	}
+	if est.Porta != porta {
+		t.Fatalf("porta = %d, esperado %d", est.Porta, porta)
 	}
 }
