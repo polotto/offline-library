@@ -15,6 +15,7 @@ BRouter com Java) que vão junto no disco, um por sistema.
 | `/wiki/` | Enciclopédia e dicionários (Kiwix) |
 | `/mapas/` | Mapa da América do Sul, busca de lugares e caminhos |
 | `/catalogo/` | Biblioteca de arquivos (busca, tags, cadastro com anexos) |
+| `/jellyfin/` | Atalho que redireciona para o Jellyfin na porta configurada (`porta_jellyfin`, `8096` por padrão) |
 
 Só a própria máquina e a rede local acessam. Ver `redes_permitidas` em
 `config/lab.json`.

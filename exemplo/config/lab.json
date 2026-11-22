@@ -7,6 +7,7 @@
   "atualizar": true,
   "hora_atualizacao": 3,
   "memoria_rotas_mb": 192,
+  "porta_jellyfin": 8096,
   "portas_antigas": {},
   "pasta_trabalho": "",
   "pasta_local": "",
