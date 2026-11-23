@@ -108,14 +108,26 @@ func (s *Servidor) handlerBuscaUnificada(w http.ResponseWriter, r *http.Request)
 	defer cancel()
 	logado := s.catalogo.usuario(r) != ""
 
+	chaveCache := semAcento(termo)
 	var wg sync.WaitGroup
 	if quer("wiki") {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if res := s.buscarWiki(ctx, termo, 8); len(res) > 0 {
-				resp.Wiki = res
+			if v, ok := cacheBuscador.pegar("wiki|" + chaveCache); ok {
+				resp.Wiki = v.([]ResultadoWiki)
+				return
 			}
+			ctxWiki, cancelWiki := context.WithTimeout(ctx, 5*time.Second)
+			defer cancelWiki()
+			res, completo := s.buscarWiki(ctxWiki, termo, 8)
+			if res == nil {
+				res = []ResultadoWiki{}
+			}
+			if completo {
+				cacheBuscador.guardar("wiki|"+chaveCache, res)
+			}
+			resp.Wiki = res
 		}()
 	}
 	if quer("livros") {
@@ -131,10 +143,15 @@ func (s *Servidor) handlerBuscaUnificada(w http.ResponseWriter, r *http.Request)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			if v, ok := cacheBuscador.pegar("enderecos|" + chaveCache); ok {
+				resp.Enderecos = v.([]ResultadoEndereco)
+				return
+			}
 			ctxEnd, cancelEnd := context.WithTimeout(ctx, 3*time.Second)
 			defer cancelEnd()
 			if res := s.buscarEnderecosRapido(ctxEnd, termo, 6); len(res) > 0 {
 				resp.Enderecos = res
+				cacheBuscador.guardar("enderecos|"+chaveCache, res)
 			}
 		}()
 	}
@@ -149,79 +166,6 @@ type sugestaoKiwix struct {
 	Value string `json:"value"`
 	Kind  string `json:"kind"`
 	Path  string `json:"path"`
-}
-
-func (s *Servidor) buscarWiki(ctx context.Context, termo string, limite int) []ResultadoWiki {
-	if est, _ := s.kiwix.Estado(); est != "pronto" {
-		return nil
-	}
-	zims := ZimsProntos(s.cfg)
-	if len(zims) == 0 {
-		return nil
-	}
-	sort.SliceStable(zims, func(i, j int) bool {
-		ptI := strings.Contains(zims[i].Prefixo, "_pt_")
-		ptJ := strings.Contains(zims[j].Prefixo, "_pt_")
-		if ptI != ptJ {
-			return ptI
-		}
-		wI := strings.HasPrefix(zims[i].Prefixo, "wikipedia_")
-		wJ := strings.HasPrefix(zims[j].Prefixo, "wikipedia_")
-		if wI != wJ {
-			return wI
-		}
-		return zims[i].Prefixo < zims[j].Prefixo
-	})
-
-	type parcial struct {
-		ordem int
-		itens []ResultadoWiki
-	}
-	ch := make(chan parcial, len(zims)*2)
-	var wg sync.WaitGroup
-
-	for idx, z := range zims {
-		id := strings.TrimSuffix(z.Arquivo, ".zim")
-		tituloCol := TituloColecao(z.Prefixo)
-		wg.Add(2)
-		go func(ordem int, acervo, col string) {
-			defer wg.Done()
-			itens := s.sugerirKiwix(ctx, acervo, col, termo, 3)
-			ch <- parcial{ordem: ordem * 2, itens: itens}
-		}(idx, id, tituloCol)
-		go func(ordem int, acervo, col string) {
-			defer wg.Done()
-			itens := s.pesquisarKiwixHTML(ctx, acervo, col, termo, 3)
-			ch <- parcial{ordem: ordem*2 + 1, itens: itens}
-		}(idx, id, tituloCol)
-	}
-	wg.Wait()
-	close(ch)
-
-	var lotes []parcial
-	for p := range ch {
-		lotes = append(lotes, p)
-	}
-	sort.Slice(lotes, func(i, j int) bool { return lotes[i].ordem < lotes[j].ordem })
-
-	porURL := map[string]int{}
-	var saida []ResultadoWiki
-	for _, l := range lotes {
-		for _, item := range l.itens {
-			if pos, ja := porURL[item.URL]; ja {
-				if saida[pos].Trecho == "" && item.Trecho != "" {
-					saida[pos].Trecho = item.Trecho
-				}
-				continue
-			}
-			porURL[item.URL] = len(saida)
-			saida = append(saida, item)
-		}
-	}
-	if len(saida) > limite {
-		saida = saida[:limite]
-	}
-	return saida
 }
 
 func montarURLArtigoWiki(acervo, caminho string) string {
@@ -369,52 +313,6 @@ func coletarItensKiwix(n *html.Node, colecao string, max int, out *[]ResultadoWi
 		}
 		coletarItensKiwix(c, colecao, max, out)
 	}
-}
-
-// --- Endereços e lugares: mesma busca e ordem do mapa (busca.go)
-
-func (s *Servidor) buscarEnderecosRapido(ctx context.Context, termo string, limite int) []ResultadoEndereco {
-	if !s.busca.pronta() {
-		return nil
-	}
-	pronto := make(chan []Lugar, 1)
-	go func() {
-		lista, _ := s.busca.Procurar(termo, 0, 0, false, limite*3)
-		pronto <- lista
-	}()
-	var candidatos []Lugar
-	select {
-	case candidatos = <-pronto:
-	case <-ctx.Done():
-		return nil
-	}
-	var saida []ResultadoEndereco
-	for _, l := range candidatos {
-		duplicado := false
-		for _, ex := range saida {
-			if ex.Nome == l.Nome && ex.Tipo == l.Tipo && distanciaKm(ex.Lat, ex.Lon, l.Lat, l.Lon) < 1.5 {
-				duplicado = true
-				break
-			}
-		}
-		if duplicado {
-			continue
-		}
-		params := url.Values{
-			"lat":  {strconv.FormatFloat(l.Lat, 'f', 6, 64)},
-			"lon":  {strconv.FormatFloat(l.Lon, 'f', 6, 64)},
-			"nome": {l.Nome},
-			"tipo": {l.Tipo},
-		}
-		saida = append(saida, ResultadoEndereco{
-			Nome: l.Nome, Detalhe: l.Detalhe, Tipo: l.Tipo, Lat: l.Lat, Lon: l.Lon,
-			URL: "/mapas/?" + params.Encode(),
-		})
-		if len(saida) >= limite {
-			break
-		}
-	}
-	return saida
 }
 
 // --- Indexação e busca do conteúdo interno dos livros
