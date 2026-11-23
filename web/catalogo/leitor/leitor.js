@@ -96,7 +96,9 @@ async function lerPDF() {
     largura = documento.clientWidth;
     abrir(atual).catch(falha);
   }).observe(documento);
-  await abrir(ultimaPosicao());
+  // ?pagina=N vem do buscador da página inicial e vale mais que a última posição.
+  const pedida = new URLSearchParams(location.search).get("pagina");
+  await abrir(/^[1-9][0-9]{0,8}$/.test(pedida || "") ? pedida : ultimaPosicao());
 }
 
 async function lerEPUB() {

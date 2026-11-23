@@ -101,4 +101,15 @@ function instalarBusca(map, rotas) {
     else procurar();
   });
   document.addEventListener('click', e => { if (!form.contains(e.target)) fechar(); });
+
+  // Vindo do buscador da página inicial: /mapas/?lat=..&lon=..&nome=..&tipo=..
+  const pedidoInicial = new URLSearchParams(location.search);
+  const lat = Number(pedidoInicial.get('lat')), lon = Number(pedidoInicial.get('lon'));
+  if (pedidoInicial.has('lat') && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+    const lugar = {lat, lon, nome: pedidoInicial.get('nome') || '', tipo: pedidoInicial.get('tipo') || ''};
+    map.once('load', () => {
+      if (map.getMaxBounds() && !map.getMaxBounds().contains([lon, lat])) map.setMaxBounds(null);
+      ir(lugar);
+    });
+  }
 }

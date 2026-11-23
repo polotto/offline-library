@@ -1,6 +1,7 @@
 package lab
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -18,6 +19,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/polotto/offline-library/web"
@@ -75,6 +78,12 @@ type Catalogo struct {
 	dir     string
 	segredo []byte
 	tpl     *template.Template
+
+	// Índice do texto de dentro dos livros (buscador.go).
+	idx       *sql.DB // livros.db, ver buscador.go
+	ctxIndice context.Context
+	indexMu   sync.Mutex
+	indexando atomic.Bool
 }
 
 type Item struct {
@@ -132,12 +141,22 @@ func AbrirCatalogo(cfg *Config) (*Catalogo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Catalogo{cfg: cfg, db: db, dir: dir, segredo: seg, tpl: tpl}, nil
+	c := &Catalogo{cfg: cfg, db: db, dir: dir, segredo: seg, tpl: tpl}
+	// Sem o índice dos livros, o catálogo funciona; só a busca no texto falta.
+	if idx, err := abrirIndiceLivros(cfg.ArquivoIndiceLivros()); err != nil {
+		log.Printf("catálogo: índice dos livros indisponível: %v", err)
+	} else {
+		c.idx = idx
+	}
+	return c, nil
 }
 
 func (c *Catalogo) Fechar() {
 	if c.db != nil {
 		c.db.Close()
+	}
+	if c.idx != nil {
+		c.idx.Close()
 	}
 }
 
@@ -570,6 +589,7 @@ func (c *Catalogo) salvar(w http.ResponseWriter, r *http.Request) {
 			log.Printf("catálogo: anexo %s: %v", e.nome, err)
 		}
 	}
+	c.IniciarIndexacaoConteudo(nil)
 	http.Redirect(w, r, fmt.Sprintf("/catalogo/item/%d", novoID), http.StatusSeeOther)
 }
 
@@ -716,6 +736,7 @@ func (c *Catalogo) apagar(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = c.db.Exec(`DELETE FROM itens_fts WHERE rowid = ?`, id)
 	_ = os.RemoveAll(filepath.Join(c.dir, "arquivos", strconv.FormatInt(id, 10)))
+	c.IniciarIndexacaoConteudo(nil)
 	http.Redirect(w, r, "/catalogo/", http.StatusSeeOther)
 }
 
@@ -728,5 +749,6 @@ func (c *Catalogo) apagarArquivo(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = c.db.Exec(`DELETE FROM arquivos WHERE id = ?`, idDe(r))
 	_ = os.Remove(filepath.Join(c.dir, "arquivos", filepath.FromSlash(caminho)))
+	c.IniciarIndexacaoConteudo(nil)
 	http.Redirect(w, r, fmt.Sprintf("/catalogo/item/%d/editar", item), http.StatusSeeOther)
 }

@@ -157,6 +157,15 @@ func (c *Config) ArquivoBusca() string {
 	return c.Caminho("mapas", "busca.db")
 }
 
+// ArquivoIndiceLivros guarda o texto de dentro dos livros para a busca.
+// É refeito sozinho, por isso fica no disco interno quando há pasta_local.
+func (c *Config) ArquivoIndiceLivros() string {
+	if c.PastaLocal != "" {
+		return filepath.Join(c.PastaLocal, "livros.db")
+	}
+	return c.Caminho("catalogo-lab", "livros.db")
+}
+
 // Trabalho é a pasta dos arquivos grandes e temporários da busca.
 func (c *Config) Trabalho() string {
 	switch {

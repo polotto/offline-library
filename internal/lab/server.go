@@ -62,6 +62,7 @@ func (s *Servidor) Rotas() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("GET /{$}", s.arquivoWeb("portal/index.html"))
 	m.HandleFunc("GET /estado.json", s.estado)
+	m.HandleFunc("GET /busca.json", s.handlerBuscaUnificada)
 	m.HandleFunc("GET /verificacao.json", s.verificar)
 	m.HandleFunc("GET /mapas", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/mapas/", http.StatusMovedPermanently)
@@ -246,6 +247,7 @@ func (s *Servidor) proxyKiwix() http.Handler {
 func (s *Servidor) Iniciar(ctx context.Context) error {
 	go s.kiwix.Rodar(ctx)
 	go s.vigiarColecoes(ctx)
+	s.catalogo.IniciarIndexacaoConteudo(ctx)
 	s.redirecionarPortasAntigas(ctx)
 	go s.rotas.Rodar(ctx)
 	if s.cfg.Atualizar {
