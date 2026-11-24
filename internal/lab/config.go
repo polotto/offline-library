@@ -22,6 +22,8 @@ type Config struct {
 	Atualizar       bool     `json:"atualizar"`
 	HoraAtualizacao int      `json:"hora_atualizacao"`
 	MemoriaRotasMB  int      `json:"memoria_rotas_mb"`
+	// PortaJellyfin é a porta da central de mídia Jellyfin na mesma máquina.
+	PortaJellyfin int `json:"porta_jellyfin"`
 	// PortasAntigas redireciona portas de instalações anteriores para um
 	// caminho, por exemplo {"8088": "/wiki/"}, para manter favoritos.
 	PortasAntigas map[string]string `json:"portas_antigas"`
@@ -49,6 +51,7 @@ func padrao() Config {
 		Atualizar:       true,
 		HoraAtualizacao: 3,
 		MemoriaRotasMB:  192,
+		PortaJellyfin:   8096,
 	}
 }
 
@@ -70,6 +73,9 @@ func Carregar(dados string) (Config, error) {
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return c, err
+	}
+	if c.PortaJellyfin <= 0 {
+		c.PortaJellyfin = 8096
 	}
 	for _, r := range c.RedesPermitidas {
 		_, n, err := net.ParseCIDR(r)
@@ -149,6 +155,15 @@ func (c *Config) ArquivoBusca() string {
 		return filepath.Join(c.PastaLocal, "busca.db")
 	}
 	return c.Caminho("mapas", "busca.db")
+}
+
+// ArquivoIndiceLivros guarda o texto de dentro dos livros para a busca.
+// É refeito sozinho, por isso fica no disco interno quando há pasta_local.
+func (c *Config) ArquivoIndiceLivros() string {
+	if c.PastaLocal != "" {
+		return filepath.Join(c.PastaLocal, "livros.db")
+	}
+	return c.Caminho("catalogo-lab", "livros.db")
 }
 
 // Trabalho é a pasta dos arquivos grandes e temporários da busca.

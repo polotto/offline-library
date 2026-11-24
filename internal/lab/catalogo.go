@@ -1,6 +1,7 @@
 package lab
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -18,6 +19,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/polotto/offline-library/web"
@@ -55,6 +58,14 @@ CREATE TABLE IF NOT EXISTS arquivos (
   criado TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS usuarios (nome TEXT PRIMARY KEY, hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS apontamentos (
+  id INTEGER PRIMARY KEY,
+  arquivo_id INTEGER NOT NULL REFERENCES arquivos(id) ON DELETE CASCADE,
+  usuario TEXT NOT NULL REFERENCES usuarios(nome) ON DELETE CASCADE,
+  posicao TEXT NOT NULL,
+  texto TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS apontamentos_arquivo_usuario ON apontamentos(arquivo_id, usuario);
 CREATE VIRTUAL TABLE IF NOT EXISTS itens_fts USING fts5(
   titulo, autores, assunto, descricao, tags,
   tokenize = 'unicode61 remove_diacritics 2');
@@ -67,6 +78,12 @@ type Catalogo struct {
 	dir     string
 	segredo []byte
 	tpl     *template.Template
+
+	// Índice do texto de dentro dos livros (buscador.go).
+	idx       *sql.DB // livros.db, ver buscador.go
+	ctxIndice context.Context
+	indexMu   sync.Mutex
+	indexando atomic.Bool
 }
 
 type Item struct {
@@ -124,12 +141,22 @@ func AbrirCatalogo(cfg *Config) (*Catalogo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Catalogo{cfg: cfg, db: db, dir: dir, segredo: seg, tpl: tpl}, nil
+	c := &Catalogo{cfg: cfg, db: db, dir: dir, segredo: seg, tpl: tpl}
+	// Sem o índice dos livros, o catálogo funciona; só a busca no texto falta.
+	if idx, err := abrirIndiceLivros(cfg.ArquivoIndiceLivros()); err != nil {
+		log.Printf("catálogo: índice dos livros indisponível: %v", err)
+	} else {
+		c.idx = idx
+	}
+	return c, nil
 }
 
 func (c *Catalogo) Fechar() {
 	if c.db != nil {
 		c.db.Close()
+	}
+	if c.idx != nil {
+		c.idx.Close()
 	}
 }
 
@@ -148,6 +175,7 @@ func (c *Catalogo) Registrar(m *http.ServeMux) {
 	m.HandleFunc("GET /catalogo/{$}", c.lista)
 	m.HandleFunc("GET /catalogo/item/{id}", c.item)
 	m.HandleFunc("GET /catalogo/arquivo/{id}", c.baixar)
+	c.registrarLeitor(m)
 	m.HandleFunc("GET /catalogo/entrar", c.entrarForm)
 	m.HandleFunc("POST /catalogo/entrar", c.entrar)
 	m.HandleFunc("POST /catalogo/sair", c.sair)
@@ -420,12 +448,21 @@ func (c *Catalogo) item(w http.ResponseWriter, r *http.Request) {
 	c.render(w, r, "item", map[string]any{"Item": i})
 }
 
-func (c *Catalogo) baixar(w http.ResponseWriter, r *http.Request) {
-	var a Arquivo
+func (c *Catalogo) arquivo(r *http.Request) (Arquivo, error) {
+	a := Arquivo{ID: idDe(r)}
 	var publico bool
-	err := c.db.QueryRow(`SELECT a.nome, a.caminho, a.tipo_mime, i.publico FROM arquivos a JOIN itens i ON i.id = a.item_id
-		WHERE a.id = ?`, idDe(r)).Scan(&a.Nome, &a.Caminho, &a.Mime, &publico)
-	if err != nil || (!publico && c.usuario(r) == "") {
+	err := c.db.QueryRow(`SELECT a.item_id, a.nome, a.caminho, a.tipo_mime, i.publico
+		FROM arquivos a JOIN itens i ON i.id = a.item_id WHERE a.id = ?`, a.ID).
+		Scan(&a.ItemID, &a.Nome, &a.Caminho, &a.Mime, &publico)
+	if err == nil && !publico && c.usuario(r) == "" {
+		err = sql.ErrNoRows
+	}
+	return a, err
+}
+
+func (c *Catalogo) baixar(w http.ResponseWriter, r *http.Request) {
+	a, err := c.arquivo(r)
+	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -443,6 +480,9 @@ func (c *Catalogo) baixar(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(a.Mime, "image/") || a.Mime == "application/pdf" || strings.HasPrefix(a.Mime, "audio/") ||
 		strings.HasPrefix(a.Mime, "video/") || strings.HasPrefix(a.Mime, "text/plain") {
 		disp = "inline"
+	}
+	if r.URL.Query().Get("baixar") == "1" {
+		disp = "attachment"
 	}
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disp, map[string]string{"filename": a.Nome}))
 	w.Header().Set("Content-Security-Policy", "sandbox")
@@ -549,6 +589,7 @@ func (c *Catalogo) salvar(w http.ResponseWriter, r *http.Request) {
 			log.Printf("catálogo: anexo %s: %v", e.nome, err)
 		}
 	}
+	c.IniciarIndexacaoConteudo(nil)
 	http.Redirect(w, r, fmt.Sprintf("/catalogo/item/%d", novoID), http.StatusSeeOther)
 }
 
@@ -695,6 +736,7 @@ func (c *Catalogo) apagar(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = c.db.Exec(`DELETE FROM itens_fts WHERE rowid = ?`, id)
 	_ = os.RemoveAll(filepath.Join(c.dir, "arquivos", strconv.FormatInt(id, 10)))
+	c.IniciarIndexacaoConteudo(nil)
 	http.Redirect(w, r, "/catalogo/", http.StatusSeeOther)
 }
 
@@ -707,5 +749,6 @@ func (c *Catalogo) apagarArquivo(w http.ResponseWriter, r *http.Request) {
 	}
 	_, _ = c.db.Exec(`DELETE FROM arquivos WHERE id = ?`, idDe(r))
 	_ = os.Remove(filepath.Join(c.dir, "arquivos", filepath.FromSlash(caminho)))
+	c.IniciarIndexacaoConteudo(nil)
 	http.Redirect(w, r, fmt.Sprintf("/catalogo/item/%d/editar", item), http.StatusSeeOther)
 }

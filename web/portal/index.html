@@ -4,28 +4,49 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Biblioteca da casa</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f3f0e8;color:#22332c;font:17px/1.6 system-ui,sans-serif}main{max-width:1050px;margin:auto;padding:70px 24px}header{border-bottom:1px solid #bcc8bd;padding-bottom:28px;margin-bottom:32px}.eyebrow{font-size:13px;letter-spacing:.15em;text-transform:uppercase;color:#52745b}h1{font:clamp(36px,7vw,62px)/1.15 Georgia,serif;margin:16px 0}header p{max-width:600px;color:#526057}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}.card{display:block;background:#fffdf7;border:1px solid #cbd3c5;border-radius:10px;padding:26px;color:inherit;text-decoration:none}.card:hover,.card:focus-visible{border-color:#236645;outline:2px solid #236645;outline-offset:3px}h2{font:27px Georgia,serif;margin:0 0 14px}.card p{color:#526057;margin:0 0 24px}.open{color:#236645;font-weight:650}footer{margin-top:40px;font-size:14px;color:#526057}code{overflow-wrap:anywhere}.estado{display:block;font-size:14px;margin:0 0 18px;padding:6px 10px;border-radius:6px;background:#eef1e9;color:#3d4a42}.estado.pronto{background:#e2efe5;color:#1d5a3b}.estado.falha{background:#f6e1de;color:#8d251d}.estado.andamento{background:#f5ecd8;color:#6d4a0c}#colecoes{list-style:none;padding:0;margin:0 0 18px;font-size:14px}#colecoes li{padding:5px 0;border-top:1px solid #e3e6dc}#colecoes b{font-weight:650}#colecoes small{display:block;color:#526057}progress{width:100%;height:8px;accent-color:#236645}#situacao{font-size:14px;color:#526057;margin:22px 0 0}
+*{box-sizing:border-box}body{margin:0;background:#f3f0e8;color:#22332c;font:17px/1.6 system-ui,sans-serif}main{max-width:1050px;margin:auto;padding:70px 24px}header{border-bottom:1px solid #bcc8bd;padding-bottom:28px;margin-bottom:32px}.eyebrow{font-size:13px;letter-spacing:.15em;text-transform:uppercase;color:#52745b}h1{font:clamp(36px,7vw,62px)/1.15 Georgia,serif;margin:16px 0}header p{max-width:600px;color:#526057}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}@media (min-width:640px){.cards{grid-template-columns:repeat(2,1fr)}}.card{display:block;background:#fffdf7;border:1px solid #cbd3c5;border-radius:10px;padding:26px;color:inherit;text-decoration:none}.card:hover,.card:focus-visible{border-color:#236645;outline:2px solid #236645;outline-offset:3px}h2{font:27px Georgia,serif;margin:0 0 14px}.card p{color:#526057;margin:0 0 24px}.open{color:#236645;font-weight:650}footer{margin-top:40px;font-size:14px;color:#526057}code{overflow-wrap:anywhere}.estado{display:block;font-size:14px;margin:0 0 18px;padding:6px 10px;border-radius:6px;background:#eef1e9;color:#3d4a42}.estado.pronto{background:#e2efe5;color:#1d5a3b}.estado.falha{background:#f6e1de;color:#8d251d}.estado.andamento{background:#f5ecd8;color:#6d4a0c}#colecoes{list-style:none;padding:0;margin:0 0 18px;font-size:14px}#colecoes li{padding:5px 0;border-top:1px solid #e3e6dc}#colecoes b{font-weight:650}#colecoes small{display:block;color:#526057}progress{width:100%;height:8px;accent-color:#236645}#situacao{font-size:14px;color:#526057;margin:22px 0 0}
 #ajuda{margin-top:56px;border-top:1px solid #bcc8bd;padding-top:32px}#ajuda>p{max-width:640px;color:#526057;margin:0 0 20px}
 #ajuda details{background:#fffdf7;border:1px solid #cbd3c5;border-radius:10px;margin:0 0 12px}
 #ajuda summary{cursor:pointer;padding:16px 22px;font:21px Georgia,serif}#ajuda summary:focus-visible{outline:2px solid #236645;outline-offset:3px}
 #ajuda .corpo{padding:0 22px 18px;color:#3d4a42}#ajuda .corpo p{margin:0 0 12px}#ajuda ol,#ajuda ul{margin:0 0 12px;padding-left:22px}#ajuda li{margin:0 0 6px}
+#buscador{margin:0 0 36px}#buscador form{display:flex;gap:10px}#buscador input{flex:1;min-width:0;font:inherit;font-size:18px;padding:13px 16px;border:1px solid #9fb0a2;border-radius:10px;background:#fffdf7;color:inherit}#buscador input:focus-visible,#buscador button:focus-visible{outline:2px solid #236645;outline-offset:2px}#buscador button{font:inherit;font-weight:650;padding:0 20px;border:0;border-radius:10px;background:#236645;color:#fff;cursor:pointer}
+#buscador .dica{font-size:14px;color:#526057;margin:8px 2px 0}#resultados{display:grid;gap:16px;margin-top:20px}#resultados[hidden]{display:none}
+.grupo{background:#fffdf7;border:1px solid #cbd3c5;border-radius:10px;padding:18px 22px}.grupo h3{font:21px Georgia,serif;margin:0 0 4px}.grupo .situacao{font-size:14px;color:#526057;margin:0}.grupo ol{list-style:none;margin:8px 0 0;padding:0}.grupo li{border-top:1px solid #e3e6dc;padding:10px 0}.grupo li:first-child{border-top:0}
+.grupo a{color:#1d5a3b;font-weight:650;text-decoration:none}.grupo a:hover,.grupo a:focus-visible{text-decoration:underline}.grupo .meta{display:block;font-size:13px;color:#6a786e}.grupo .trecho{display:block;font-size:15px;color:#3d4a42;margin-top:2px}.grupo mark{background:#f5e3a8;color:inherit;border-radius:2px}.grupo .acoes{font-size:14px;margin-top:4px}.grupo .acoes a{font-weight:500;margin-right:14px}
+@media (max-width:520px){main{padding:40px 16px}#buscador button{padding:0 14px}.grupo{padding:14px 16px}}
 </style>
 <main>
 <header><div class="eyebrow">Acervo local</div><h1 id="nome">Biblioteca da casa</h1><p>Conhecimento, mapas e arquivos para consultar nos computadores e celulares conectados à rede de casa.</p></header>
+<section id="buscador" aria-label="Buscar no acervo">
+<form role="search" id="form-busca"><label for="q" class="eyebrow" hidden>Buscar</label><input id="q" name="q" type="search" autocomplete="off" placeholder="Buscar na enciclopédia, nos livros e em endereços" aria-describedby="dica-busca"><button type="submit">Buscar</button></form>
+<p class="dica" id="dica-busca">Exemplos: "fotossíntese", "Machado de Assis", "Rua XV de Novembro Curitiba".</p>
+<div id="resultados" hidden aria-live="polite">
+<section class="grupo" data-fonte="wiki"><h3>Enciclopédia e dicionários</h3><p class="situacao"></p><ol></ol></section>
+<section class="grupo" data-fonte="livros"><h3>Dentro dos livros</h3><p class="situacao"></p><ol></ol></section>
+<section class="grupo" data-fonte="enderecos"><h3>Endereços e lugares</h3><p class="situacao"></p><ol></ol></section>
+</div>
+</section>
 <section class="cards" aria-label="Serviços">
 <a class="card" href="/wiki/" target="_blank" rel="noopener noreferrer"><h2>Enciclopédia e dicionários</h2><p>Wikipédia e Wikcionário em português, inglês e espanhol. Cada coleção aparece quando seu download termina.</p><span class="estado" id="e-enciclopedia">Consultando situação...</span><ul id="colecoes"></ul><span class="open">Abrir coleções →</span></a>
 <a class="card" href="/mapas/" target="_blank" rel="noopener noreferrer"><h2>Mapas</h2><p>América do Sul offline, com ruas, busca de endereços e cálculo de caminhos.</p><span class="estado" id="e-mapas">Consultando situação...</span><span class="open">Explorar o mapa →</span></a>
 <a class="card" href="/catalogo/" target="_blank" rel="noopener noreferrer"><h2>Biblioteca de arquivos</h2><p>Acervo com autor, idioma, assunto e etiquetas. Consulte os registros ou entre para cadastrar novos arquivos.</p><span class="estado" id="e-catalogo">Consultando situação...</span><span class="open">Consultar a biblioteca →</span></a>
+<a class="card" id="atalho-jellyfin" href="/jellyfin/" target="_blank" rel="noopener noreferrer"><h2>Jellyfin</h2><p>Filmes, séries e músicas para assistir na TV, no computador e no celular. Endereço: <code id="endereco-jellyfin">:8096</code>.</p><span class="estado" id="e-jellyfin">Consultando situação...</span><span class="open">Abrir Jellyfin →</span></a>
 </section>
 <p id="situacao" role="status">Consultando situação...</p>
 <p id="atualizacoes" class="estado" role="status">Atualizações automáticas: consultando situação...</p>
 <section id="ajuda" aria-labelledby="ajuda-titulo">
 <h2 id="ajuda-titulo">Como usar</h2>
 <p>Tudo funciona sem internet, em qualquer computador ou celular ligado à rede de casa. Os links acima abrem cada serviço em uma nova aba.</p>
+<details><summary>Buscar em tudo de uma vez</summary><div class="corpo"><ol>
+<li>Digite no campo do alto da página, por exemplo "fotossíntese", "Machado de Assis" ou "Rua XV de Novembro Curitiba".</li>
+<li>Os resultados aparecem em três grupos: artigos da enciclopédia e dicionários, trechos de dentro dos livros e endereços.</li>
+<li>Clique num artigo para lê-lo, num trecho para abrir o livro na página encontrada, ou num endereço para vê-lo no mapa.</li>
+</ol><p>Livros recém-cadastrados entram na busca depois de alguns minutos, quando o servidor termina de lê-los. Itens não públicos só aparecem para quem entrou na biblioteca.</p></div></details>
 <details><summary>Para que serve cada coisa</summary><div class="corpo"><ul>
 <li><b>Enciclopédia e dicionários:</b> Wikipédia e Wikcionário inteiros, para ler artigos e consultar palavras.</li>
 <li><b>Mapas:</b> América do Sul com ruas, para buscar endereços e lugares e calcular caminhos de carro, bicicleta ou a pé.</li>
 <li><b>Biblioteca de arquivos:</b> livros, documentos, imagens, áudios e vídeos da casa, com autor, idioma, assunto e etiquetas.</li>
+<li><b>Jellyfin:</b> central de mídia com filmes, séries e músicas para assistir na TV, no computador ou no celular.</li>
 <li><b>Situação:</b> as faixas acima mostram o que está disponível e o espaço livre no disco.</li>
 </ul></div></details>
 <details><summary>Pesquisar na enciclopédia</summary><div class="corpo"><ol>
@@ -65,6 +86,19 @@
 </main>
 <script>
 const rotulos = {pronto:'Disponível', baixando:'Baixando', conferindo:'Conferindo', fila:'Na fila', parado:'Em pausa', falha:'Com falha', pendente:'Pendente', iniciando:'Iniciando'};
+function urlNaPorta(porta) {
+  const h = location.hostname || '127.0.0.1';
+  return (location.protocol === 'https:' ? 'https://' : 'http://') + (h.includes(':') ? '[' + h + ']' : h) + ':' + porta;
+}
+function atualizarAtalhoJellyfin(jf) {
+  const porta = (jf && jf.porta) || 8096;
+  const url = urlNaPorta(porta);
+  const link = document.getElementById('atalho-jellyfin');
+  const codigo = document.getElementById('endereco-jellyfin');
+  if (link) link.href = url + '/';
+  if (codigo) codigo.textContent = (jf && jf.endereco && jf.endereco !== url) ? (url + ' (ou ' + jf.endereco + ')') : url;
+}
+atualizarAtalhoJellyfin();
 function marcar(id, parte) {
   const alvo = document.getElementById(id);
   if (!parte) return;
@@ -85,7 +119,8 @@ async function atualizar() {
     document.getElementById('nome').textContent = d.nome;
     document.title = d.nome;
     document.getElementById('versao').textContent = 'Versão ' + d.versao + ', ' + d.plataforma + '.';
-    marcar('e-enciclopedia', d.enciclopedia); marcar('e-mapas', d.mapas); marcar('e-catalogo', d.catalogo);
+    marcar('e-enciclopedia', d.enciclopedia); marcar('e-mapas', d.mapas); marcar('e-catalogo', d.catalogo); marcar('e-jellyfin', d.jellyfin);
+    atualizarAtalhoJellyfin(d.jellyfin);
     document.getElementById('colecoes').replaceChildren(...(d.colecoes || []).map(c => {
       const li = document.createElement('li'), nome = document.createElement('b'), det = document.createElement('small');
       nome.textContent = c.titulo + ' · ' + (rotulos[c.estado] || c.estado);
@@ -106,5 +141,113 @@ async function atualizar() {
   }
 }
 atualizar(); setInterval(atualizar, 20000); setInterval(idade, 5000);
+</script>
+<script>
+/* Buscador da página inicial: uma consulta por fonte, cada uma aparece quando chega. */
+(function () {
+  const form = document.getElementById('form-busca');
+  const campo = document.getElementById('q');
+  const caixa = document.getElementById('resultados');
+  const grupos = [...caixa.querySelectorAll('.grupo')];
+  const vazio = {wiki: 'Nenhum artigo encontrado.', livros: 'Nenhum trecho encontrado nos livros.', enderecos: 'Nenhum endereço encontrado.'};
+  let espera = null, pedidos = [], rodada = 0;
+
+  function palavras(termo) {
+    return termo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(p => p.length > 1);
+  }
+  function destacar(alvo, texto, termos) {
+    alvo.textContent = '';
+    if (!texto) return;
+    // Compara sem acento, mas mostra o texto original.
+    const simples = [...texto].map(c => c.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().charAt(0) || c);
+    const plano = simples.join('');
+    const marcas = new Array(simples.length).fill(false);
+    for (const t of termos) {
+      let i = plano.indexOf(t);
+      while (i >= 0) { for (let k = i; k < i + t.length; k++) marcas[k] = true; i = plano.indexOf(t, i + t.length); }
+    }
+    const letras = [...texto];
+    let buf = '', marcado = false;
+    const soltar = () => {
+      if (!buf) return;
+      if (marcado) { const m = document.createElement('mark'); m.textContent = buf; alvo.append(m); } else alvo.append(buf);
+      buf = '';
+    };
+    letras.forEach((c, i) => { if (marcas[i] !== marcado) { soltar(); marcado = marcas[i]; } buf += c; });
+    soltar();
+  }
+  function link(href, texto) {
+    const a = document.createElement('a');
+    a.href = href; a.textContent = texto; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    return a;
+  }
+  function linha(fonte, r, termos) {
+    const li = document.createElement('li');
+    const meta = document.createElement('span'); meta.className = 'meta';
+    const trecho = document.createElement('span'); trecho.className = 'trecho';
+    if (fonte === 'wiki') {
+      li.append(link(r.url, r.titulo));
+      meta.textContent = r.colecao;
+      destacar(trecho, r.trecho, termos);
+    } else if (fonte === 'livros') {
+      li.append(link(r.url_leitura || r.url, r.titulo));
+      meta.textContent = [r.autores, r.local].filter(Boolean).join(' · ');
+      destacar(trecho, r.trecho, termos);
+    } else {
+      li.append(link(r.url, r.nome));
+      meta.textContent = [r.tipo, r.detalhe].filter(Boolean).join(' · ');
+    }
+    li.append(meta);
+    if (trecho.childNodes.length) li.append(trecho);
+    if (fonte === 'livros' && r.url_leitura) {
+      const acoes = document.createElement('div'); acoes.className = 'acoes';
+      acoes.append(link(r.url, 'Ver ficha'));
+      li.append(acoes);
+    }
+    return li;
+  }
+  async function consultar(grupo, termo, minha) {
+    const fonte = grupo.dataset.fonte;
+    const situacao = grupo.querySelector('.situacao');
+    const lista = grupo.querySelector('ol');
+    situacao.textContent = 'Procurando...';
+    lista.replaceChildren();
+    const ctl = new AbortController();
+    pedidos.push(ctl);
+    try {
+      const r = await fetch('/busca.json?' + new URLSearchParams({q: termo, fonte}), {signal: ctl.signal, cache: 'no-store'});
+      if (!r.ok) throw Error(r.status);
+      const d = await r.json();
+      if (minha !== rodada) return;
+      const itens = d[fonte] || [];
+      const termos = palavras(termo);
+      lista.replaceChildren(...itens.map(i => linha(fonte, i, termos)));
+      let texto = itens.length ? '' : vazio[fonte];
+      if (fonte === 'livros' && d.indexando_livros) texto = (texto ? texto + ' ' : '') + 'Os livros ainda estão sendo lidos; volte a buscar em alguns minutos.';
+      situacao.textContent = texto;
+      situacao.hidden = !texto;
+    } catch (e) {
+      if (e.name === 'AbortError' || minha !== rodada) return;
+      situacao.hidden = false;
+      situacao.textContent = 'Esta busca não respondeu agora. Tente de novo em instantes.';
+    }
+  }
+  function buscar() {
+    clearTimeout(espera);
+    pedidos.forEach(p => p.abort()); pedidos = [];
+    const termo = campo.value.trim();
+    const url = new URL(location.href);
+    if (termo) url.searchParams.set('q', termo); else url.searchParams.delete('q');
+    history.replaceState(null, '', url);
+    if (termo.length < 2) { caixa.hidden = true; return; }
+    caixa.hidden = false;
+    const minha = ++rodada;
+    grupos.forEach(g => { g.querySelector('.situacao').hidden = false; consultar(g, termo, minha); });
+  }
+  campo.addEventListener('input', () => { clearTimeout(espera); espera = setTimeout(buscar, 450); });
+  form.addEventListener('submit', e => { e.preventDefault(); buscar(); });
+  const inicial = new URLSearchParams(location.search).get('q');
+  if (inicial) { campo.value = inicial; buscar(); }
+})();
 </script>
 </html>

@@ -62,6 +62,7 @@ func (s *Servidor) Rotas() http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("GET /{$}", s.arquivoWeb("portal/index.html"))
 	m.HandleFunc("GET /estado.json", s.estado)
+	m.HandleFunc("GET /busca.json", s.handlerBuscaUnificada)
 	m.HandleFunc("GET /verificacao.json", s.verificar)
 	m.HandleFunc("GET /mapas", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/mapas/", http.StatusMovedPermanently)
@@ -69,12 +70,29 @@ func (s *Servidor) Rotas() http.Handler {
 	m.HandleFunc("GET /mapas/rotas", s.proxyRotas)
 	m.HandleFunc("GET /mapas/busca", s.busca.handler)
 	m.HandleFunc("GET /mapas/", s.mapas) // GET também atende HEAD
-	m.Handle("/wiki/", s.proxyKiwix())
+	s.registrarEnciclopedia(m)
 	m.HandleFunc("GET /wiki", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/wiki/", http.StatusMovedPermanently)
 	})
+	m.HandleFunc("GET /jellyfin", s.redirecionarJellyfin)
+	m.HandleFunc("GET /jellyfin/", s.redirecionarJellyfin)
 	s.catalogo.Registrar(m)
 	return s.filtro(s.registro(m))
+}
+
+func (s *Servidor) redirecionarJellyfin(w http.ResponseWriter, r *http.Request) {
+	host, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		host = r.Host
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	porta := s.cfg.PortaJellyfin
+	if porta <= 0 {
+		porta = 8096
+	}
+	http.Redirect(w, r, "http://"+comPorta(host, porta)+"/", http.StatusFound)
 }
 
 // filtro aceita só a própria máquina e a rede local.
@@ -204,7 +222,13 @@ func (s *Servidor) proxyKiwix() http.Handler {
 			u, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", s.kiwix.Porta))
 			pr.SetURL(u)
 			pr.Out.Host = pr.In.Host
+			if adaptarWiki(pr.In) {
+				pr.Out.Header.Del("Accept-Encoding")
+				pr.Out.Header.Del("If-None-Match")
+				pr.Out.Header.Del("If-Modified-Since")
+			}
 		},
+		ModifyResponse: respostaWiki,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Enciclopédia indisponível no momento.", http.StatusBadGateway)
 		},
@@ -223,6 +247,7 @@ func (s *Servidor) proxyKiwix() http.Handler {
 func (s *Servidor) Iniciar(ctx context.Context) error {
 	go s.kiwix.Rodar(ctx)
 	go s.vigiarColecoes(ctx)
+	s.catalogo.IniciarIndexacaoConteudo(ctx)
 	s.redirecionarPortasAntigas(ctx)
 	go s.rotas.Rodar(ctx)
 	if s.cfg.Atualizar {
@@ -269,6 +294,23 @@ func Enderecos(porta int) string {
 	}
 	lista = append(lista, comPorta("127.0.0.1", porta))
 	return strings.Join(lista, " e http://")
+}
+
+// enderecoLocal devolve o primeiro endereço IPv4 privado da máquina com a porta.
+func enderecoLocal(porta int) string {
+	ifaces, _ := net.Interfaces()
+	for _, i := range ifaces {
+		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := i.Addrs()
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil && n.IP.IsPrivate() {
+				return "http://" + comPorta(n.IP.String(), porta)
+			}
+		}
+	}
+	return ""
 }
 
 // comPorta junta host e porta e omite a 80, padrão do navegador.

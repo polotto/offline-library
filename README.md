@@ -15,6 +15,7 @@ BRouter com Java) que vão junto no disco, um por sistema.
 | `/wiki/` | Enciclopédia e dicionários (Kiwix) |
 | `/mapas/` | Mapa da América do Sul, busca de lugares e caminhos |
 | `/catalogo/` | Biblioteca de arquivos (busca, tags, cadastro com anexos) |
+| `/jellyfin/` | Atalho que redireciona para o Jellyfin na porta configurada (`porta_jellyfin`, `8096` por padrão) |
 
 Só a própria máquina e a rede local acessam. Ver `redes_permitidas` em
 `config/lab.json`.
@@ -108,6 +109,25 @@ Entram ruas, cidades e bairros, pontos com nome (farmácia, escola,
 hospital...) e endereços com número. A busca não diferencia acentos e
 aceita o começo das palavras.
 
+## Ler no catálogo
+
+Abra um item e escolha **Ler PDF** (Portable Document Format) ou
+**Ler EPUB** (Electronic Publication). Os leitores funcionam com o servidor
+local ligado e sem internet. Use **Baixar** para guardar o arquivo original.
+
+Entre na sua conta para salvar apontamentos. Cada apontamento guarda a
+página ou o trecho que estava aberto. Abra um apontamento para voltar ao local,
+edite seu texto ou apague-o. Os apontamentos ficam no banco do catálogo e aparecem
+apenas para a conta que os criou.
+
+## Enciclopédia e dicionários
+
+Em `/wiki/`, escolha uma coleção e pesquise no acervo local. O site abre
+artigos e verbetes em uma página de leitura com sumário e tabelas que
+rolam dentro da página. O Kiwix lê os arquivos ZIM (pacotes de páginas
+offline) e consulta seus índices. Os artigos e a busca funcionam sem
+internet enquanto o servidor local estiver disponível.
+
 ## Migrar do Omeka Classic
 
 ```sh
@@ -133,3 +153,8 @@ Kiwix (GPLv3), Eclipse Temurin (GPLv2 com exceção de classpath), BRouter
 (MIT), go-pmtiles e pmtiles.js (BSD-3), MapLibre GL JS (BSD-3), dados do
 OpenStreetMap (ODbL, © colaboradores do OpenStreetMap), mapas Protomaps
 e conteúdo da Wikipédia (CC BY-SA).
+
+O leitor inclui PDF.js 5.7.284 (Apache 2.0), EPUB.js 0.3.93 (BSD-2) e
+JSZip 3.10.2 (MIT ou GPLv3). Os termos e avisos dos arquivos distribuídos
+estão em `web/catalogo/leitor/vendor/`. O arquivo `cmaps.zip` inclui
+os mapas de caracteres do PDF.js e a licença original.

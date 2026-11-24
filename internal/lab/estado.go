@@ -128,6 +128,44 @@ type parte struct {
 	Detalhe string `json:"detalhe"`
 }
 
+type estadoJellyfin struct {
+	Estado   string `json:"estado"`
+	Detalhe  string `json:"detalhe"`
+	Porta    int    `json:"porta"`
+	Endereco string `json:"endereco,omitempty"`
+}
+
+func (s *Servidor) estadoJellyfin() estadoJellyfin {
+	porta := s.cfg.PortaJellyfin
+	if porta <= 0 {
+		porta = 8096
+	}
+	end := enderecoLocal(porta)
+	cliente := &http.Client{
+		Timeout: 500 * time.Millisecond,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := cliente.Get(fmt.Sprintf("http://127.0.0.1:%d/health", porta))
+	if err == nil {
+		_ = resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+			det := "Em funcionamento."
+			if end != "" {
+				det = "Em funcionamento em " + end + "."
+			}
+			return estadoJellyfin{Estado: "pronto", Detalhe: det, Porta: porta, Endereco: end}
+		}
+	}
+	return estadoJellyfin{
+		Estado:   "parado",
+		Detalhe:  fmt.Sprintf("Serviço não respondeu na porta %d.", porta),
+		Porta:    porta,
+		Endereco: end,
+	}
+}
+
 type colecao struct {
 	Titulo  string `json:"titulo"`
 	Estado  string `json:"estado"`
@@ -205,6 +243,7 @@ func (s *Servidor) calcularEstado() []byte {
 	}
 	resp["mapas"] = mapa
 	resp["catalogo"] = s.catalogo.estado()
+	resp["jellyfin"] = s.estadoJellyfin()
 	if livre, total, err := EspacoDisco(c.Dados); err == nil {
 		resp["disco"] = map[string]string{"livre": tamanhoLegivel(int64(livre)), "total": tamanhoLegivel(int64(total))}
 	}

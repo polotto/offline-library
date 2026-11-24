@@ -1,0 +1,51 @@
+html:has(body.lab-wiki) { font-size: 100%; background: #fffdf7; }
+body.lab-wiki {
+  margin: 0;
+  color: #22332c;
+  background: #fffdf7;
+  font: 18px/1.65 system-ui, sans-serif;
+}
+.lab-wiki a { color: #236645; }
+.lab-wiki a:visited { color: #526057; }
+.lab-wiki :focus-visible { outline: 2px solid #236645; outline-offset: 3px; }
+.lab-wiki-nav { border-bottom: 1px solid #cbd3c5; background: #f3f0e8; }
+.lab-wiki-nav a {
+  display: block;
+  box-sizing: border-box;
+  max-width: 52rem;
+  margin: auto;
+  padding: .75rem 1rem;
+  font: 600 1rem/1.4 system-ui, sans-serif;
+}
+.lab-wiki main {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 52rem;
+  margin: auto;
+  padding: 1rem 1rem 3rem;
+  overflow-wrap: anywhere;
+}
+.lab-wiki main h1, .lab-wiki main h2 { line-height: 1.2; }
+.lab-wiki #firstHeading { margin: .25rem 0 1rem; font: 2rem/1.2 Georgia, serif; }
+.lab-wiki main .mw-body-content, .lab-wiki main .mw-body-content .mw-parser-output {
+  font-size: 18px;
+  line-height: 1.65;
+}
+.lab-wiki main :is(img, video, svg, audio) { max-width: 100%; }
+.lab-wiki main :is(img, video) { height: auto; }
+.lab-wiki main :is(figure, .thumb, .thumbinner, .gallery, .gallerybox) { max-width: 100%; }
+.lab-wiki main pre { max-width: 100%; overflow: auto; }
+.lab-wiki-tabela { max-width: 100%; overflow-x: auto; margin: .75rem 0; }
+.lab-wiki-tabela > table { float: none !important; margin: 0 !important; }
+.lab-wiki-ficha, .lab-wiki-sumario {
+  margin: 1rem 0;
+  border: 1px solid #cbd3c5;
+  border-radius: .5rem;
+  padding: .5rem .75rem;
+}
+.lab-wiki-ficha summary, .lab-wiki-sumario summary { cursor: pointer; font-weight: 600; }
+.lab-wiki .results li { padding: .7rem 0; border-bottom: 1px solid #cbd3c5; }
+.lab-wiki .results li a { font-weight: 600; }
+@media (max-width: 600px) {
+  .lab-wiki main :is(.tleft, .tright, figure) { float: none; margin-inline: 0; }
+}

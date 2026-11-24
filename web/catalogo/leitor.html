@@ -1,0 +1,64 @@
+{{define "leitor"}}{{template "topo" .}}
+<link rel="stylesheet" href="/catalogo/leitor/leitor.css">
+{{with .Arquivo}}
+<a href="/catalogo/item/{{.ItemID}}">Voltar à ficha</a>
+<h2 class="titulo-leitor">{{.Nome}}</h2>
+<div class="grade-leitor" id="leitor" data-formato="{{.FormatoLeitor}}" data-fonte="/catalogo/arquivo/{{.ID}}">
+<section aria-label="Leitura">
+<div class="acoes controles-leitor">
+<button type="button" id="anterior" disabled>Anterior</button>
+<button type="button" id="proximo" disabled>Próximo</button>
+{{if eq .FormatoLeitor "PDF"}}
+<input type="number" id="pagina" min="1" step="1" value="1" aria-label="Número da página" disabled>
+{{else}}
+<select id="sumario" aria-label="Sumário" hidden><option value="">Sumário</option></select>
+{{end}}
+<button type="button" id="menor" aria-label="Reduzir tamanho" disabled>A−</button>
+<button type="button" id="maior" aria-label="Aumentar tamanho" disabled>A+</button>
+<a class="botao" href="/catalogo/arquivo/{{.ID}}?baixar=1">Baixar</a>
+</div>
+<div class="acoes estado-leitor">
+<p class="meta" id="estado-leitor" role="status">Carregando…</p>
+<a href="#apontamentos">Apontamentos</a>
+</div>
+<noscript>Ative o JavaScript para ler no site. O arquivo também está disponível pelo botão Baixar.</noscript>
+<div id="documento" tabindex="0" aria-label="Documento"></div>
+</section>
+<aside class="cartao" id="apontamentos" aria-labelledby="titulo-apontamentos">
+<h2 id="titulo-apontamentos">Apontamentos</h2>
+{{if $.Usuario}}
+<form method="post">
+<label for="texto">Novo apontamento</label>
+<textarea id="texto" name="texto" required maxlength="4000" rows="3"></textarea>
+<input type="hidden" id="posicao" name="posicao">
+<button class="forte" id="guardar" name="acao" value="criar" disabled>Salvar nesta posição</button>
+</form>
+{{range $.Apontamentos}}
+<article class="nota-leitor">
+<p>{{.Texto}}</p>
+<button type="button" data-posicao="{{.Posicao}}" disabled>{{if eq $.Arquivo.FormatoLeitor "PDF"}}Ir à página {{.Posicao}}{{else}}Ir ao trecho{{end}}</button>
+<details>
+<summary>Editar ou apagar</summary>
+<form method="post">
+<input type="hidden" name="nota" value="{{.ID}}">
+<label for="nota-{{.ID}}">Texto do apontamento</label>
+<textarea id="nota-{{.ID}}" name="texto" required maxlength="4000" rows="3">{{.Texto}}</textarea>
+<div class="acoes">
+<button name="acao" value="editar">Salvar edição</button>
+<button class="perigo" name="acao" value="apagar" formnovalidate>Apagar apontamento</button>
+</div>
+</form>
+</details>
+</article>
+{{end}}
+{{else}}
+<p><a href="/catalogo/entrar?voltar=/catalogo/ler/{{.ID}}">Entre</a> para salvar apontamentos de leitura.</p>
+{{end}}
+</aside>
+</div>
+{{if eq .FormatoLeitor "EPUB"}}
+<script defer src="/catalogo/leitor/vendor/jszip.min.js"></script>
+<script defer src="/catalogo/leitor/vendor/epub.min.js"></script>
+{{end}}
+<script type="module" src="/catalogo/leitor/leitor.js"></script>
+{{end}}{{template "fim" .}}{{end}}
