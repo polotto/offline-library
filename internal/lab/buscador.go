@@ -104,7 +104,7 @@ func (s *Servidor) handlerBuscaUnificada(w http.ResponseWriter, r *http.Request)
 	// separado e mostrar a mais rápida primeiro. Sem fonte, busca tudo.
 	fonte := r.URL.Query().Get("fonte")
 	quer := func(nome string) bool { return fonte == "" || fonte == nome }
-	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 16*time.Second)
 	defer cancel()
 	logado := s.catalogo.usuario(r) != ""
 
@@ -118,7 +118,7 @@ func (s *Servidor) handlerBuscaUnificada(w http.ResponseWriter, r *http.Request)
 				resp.Wiki = v.([]ResultadoWiki)
 				return
 			}
-			ctxWiki, cancelWiki := context.WithTimeout(ctx, 5*time.Second)
+			ctxWiki, cancelWiki := context.WithTimeout(ctx, 15*time.Second)
 			defer cancelWiki()
 			res, completo := s.buscarWiki(ctxWiki, termo, 8)
 			if res == nil {
